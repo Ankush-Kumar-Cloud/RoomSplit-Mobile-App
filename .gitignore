@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment Variables
+.env
+**/.env
+
+# Expo
+.expo/
+.expo-shared/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Build
+dist/
+build/
+
+# OS Files
+.DS_Store
+Thumbs.db

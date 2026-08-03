@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "RoomSplit",
+    "slug": "roomsplit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": { "backgroundColor": "#1AAD7D" },
+    "android": {
+      "package": "com.yourname.roomsplit",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": { "backgroundColor": "#1AAD7D" }
+    },
+    "ios": { "bundleIdentifier": "com.yourname.roomsplit" }
+  }
+}
