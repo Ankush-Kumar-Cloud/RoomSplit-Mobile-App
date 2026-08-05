@@ -55,7 +55,7 @@ const ExpenseRow = memo(function ExpenseRow({ exp, isMe, col, c, onEdit, onDelet
 );
 
 // ── Member Summary Card (horizontal scroll) ──────────────────────────────────
-const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spent, dayT, isActive, onPress }) {
+const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spent, total, isActive, onPress }) {
   return (
     <TouchableOpacity
       onPress={() => onPress(m._id)}
@@ -66,8 +66,8 @@ const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spen
       <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "700", color: col.dark, marginTop: 6, textAlign: "center" }}>
         {m.name}
       </Text>
-      <Text style={{ fontSize: 24, fontWeight: "800", color: col.dark, marginTop: 4 }}>₹{dayT.toFixed(0)}</Text>
-      <Text style={{ fontSize: 11, color: col.mid, opacity: 0.8, marginTop: 2 }}>Today</Text>
+      <Text style={{ fontSize: 24, fontWeight: "800", color: col.dark, marginTop: 4 }}>₹{total.toFixed(0)}</Text>
+      <Text style={{ fontSize: 11, color: col.mid, opacity: 0.8, marginTop: 2 }}>Total</Text>
       {budget > 0 && (
         <View style={{ width: "100%", height: 5, backgroundColor: "rgba(255,255,255,.4)", borderRadius: 99, marginTop: 8, overflow: "hidden" }}>
           <View style={{ width: `${Math.min((spent / budget) * 100, 100)}%`, height: 5, backgroundColor: col.mid, borderRadius: 99 }} />
@@ -107,15 +107,14 @@ export default function ExpensesTab({ group, members }) {
   const todayStr = today();
   const activeMemberId = selectedMemberId || meId;
 
-  const dayTotals = useMemo(() => {
+  const allTotals = useMemo(() => {
     const t = {};
-    members.forEach(m => {
-      t[m._id] = all
-        .filter(e => (e.user?._id || e.user) === m._id && e.date === todayStr)
-        .reduce((s, e) => s + e.amount, 0);
+    all.forEach(e => {
+      const uid = e.user?._id || e.user;
+      t[uid] = (t[uid] || 0) + e.amount;
     });
     return t;
-  }, [all, members, todayStr]);
+  }, [all]);
 
   const monTotals = useMemo(() => {
     const t = {};
@@ -187,7 +186,7 @@ export default function ExpensesTab({ group, members }) {
                 col={col}
                 budget={getBudget(gid, m._id, mk)}
                 spent={monTotals[m._id] || 0}
-                dayT={dayTotals[m._id] || 0}
+                total={allTotals[m._id] || 0}
                 isActive={activeMemberId === m._id}
                 onPress={handleMemberPress}
               />
@@ -255,7 +254,7 @@ export default function ExpensesTab({ group, members }) {
           const uid = member._id;
           const col = PAL[index % PAL.length];
           const memberExpenses = filtered.filter(e => (e.user?._id || e.user) === uid);
-          const todayTotal = dayTotals[uid] || 0;
+          const totalSpent = allTotals[uid] || 0;
           const monthTotal = monTotals[uid] || 0;
 
           return (
@@ -272,8 +271,8 @@ export default function ExpensesTab({ group, members }) {
                   </View>
                 </View>
                 <View style={{ marginTop: 14, backgroundColor: "#fff", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ fontSize: 14, color: c.text2 }}>Today</Text>
-                  <Text style={{ fontSize: 28, fontWeight: "800", color: col.dark }}>₹{todayTotal}</Text>
+                  <Text style={{ fontSize: 14, color: c.text2 }}>Total Spent</Text>
+                  <Text style={{ fontSize: 28, fontWeight: "800", color: col.dark }}>₹{totalSpent}</Text>
                 </View>
               </View>
 
