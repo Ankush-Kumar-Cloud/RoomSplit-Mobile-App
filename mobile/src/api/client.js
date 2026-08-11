@@ -6,8 +6,8 @@ import { io } from 'socket.io-client';
 // Android emulator: 10.0.2.2 maps to localhost on host machine
 // Physical device on same WiFi: use your machine's local IP e.g. 192.168.1.5
 // ──────────────────────────────────────────────
-export const BASE_URL = 'http://10.31.155.52:5000/api';
-export const SOCKET_URL = 'http://10.31.155.52:5000';
+export const BASE_URL = 'https://roomsplit-mobile-app.onrender.com/api';
+export const SOCKET_URL = 'https://roomsplit-mobile-app.onrender.com';
 
 export const socket = io(SOCKET_URL, {
   autoConnect: false, // Connect manually when authenticated

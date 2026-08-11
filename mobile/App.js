@@ -28,7 +28,7 @@ function AppNavigator() {
           <Text style={{ fontSize:30, color:'#fff', fontWeight:'700' }}>₹</Text>
         </View>
         <ActivityIndicator size="large" color={accent} />
-        <Text style={{ color: theme==='dark'?'#9898A0':'#65656A', fontSize:14, marginTop:16 }}>Loading RoomSplit…</Text>
+        <Text style={{ color: theme==='dark'?'#9898A0':'#65656A', fontSize:14, marginTop:16 }}>Loading SplitMate...</Text>
       </View>
     );
   }
