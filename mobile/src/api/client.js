@@ -9,6 +9,8 @@ import { io } from 'socket.io-client';
 export const BASE_URL = 'https://roomsplit-mobile-app.onrender.com/api';
 export const SOCKET_URL = 'https://roomsplit-mobile-app.onrender.com';
 
+
+
 export const socket = io(SOCKET_URL, {
   autoConnect: false, // Connect manually when authenticated
 });
