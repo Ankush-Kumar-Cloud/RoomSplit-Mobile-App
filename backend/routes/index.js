@@ -29,7 +29,7 @@ gr.delete('/:id/leave', leaveGroup);
 module.exports.groupRouter = gr;
 
 // expenses.js (nested under /api/groups/:groupId)
-const { getExpenses, createExpense, updateExpense, deleteExpense } = require('../controllers/expenseController');
+const { getExpenses, createExpense, updateExpense, deleteExpense, clearMonthExpenses } = require('../controllers/expenseController');
 const { getBudgets, upsertBudget, getSettlements, toggleSettlement } = require('../controllers/budgetSettlementController');
 const er = express.Router({ mergeParams: true });
 er.use(protect);
@@ -37,6 +37,7 @@ er.get('/expenses',                getExpenses);
 er.post('/expenses',               createExpense);
 er.put('/expenses/:expenseId',     updateExpense);
 er.delete('/expenses/:expenseId',  deleteExpense);
+er.delete('/expenses',             clearMonthExpenses); // DELETE /expenses?month=YYYY-MM
 er.get('/budgets',                 getBudgets);
 er.put('/budgets',                 upsertBudget);
 er.get('/settlements',             getSettlements);

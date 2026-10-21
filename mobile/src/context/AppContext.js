@@ -115,6 +115,14 @@ export function AppProvider({ children }) {
       });
     };
 
+    // Real-time handler: another client cleared a month's expenses
+    const handleExpensesCleared = ({ groupId, month }) => {
+      setExpenses(prev => ({
+        ...prev,
+        [groupId]: (prev[groupId] || []).filter(e => !e.date?.startsWith(month)),
+      }));
+    };
+
     const handleBudgetUpsert = (b) => {
       setBudgets(prev => {
         const gid = b.group;
@@ -136,6 +144,7 @@ export function AppProvider({ children }) {
     socket.on('expenseCreated', handleExpCreate);
     socket.on('expenseUpdated', handleExpUpdate);
     socket.on('expenseDeleted', handleExpDelete);
+    socket.on('expensesCleared', handleExpensesCleared);
     socket.on('budgetUpserted', handleBudgetUpsert);
     socket.on('settlementToggled', handleSettlementToggle);
 
@@ -143,6 +152,7 @@ export function AppProvider({ children }) {
       socket.off('expenseCreated', handleExpCreate);
       socket.off('expenseUpdated', handleExpUpdate);
       socket.off('expenseDeleted', handleExpDelete);
+      socket.off('expensesCleared', handleExpensesCleared);
       socket.off('budgetUpserted', handleBudgetUpsert);
       socket.off('settlementToggled', handleSettlementToggle);
     };
@@ -231,6 +241,22 @@ export function AppProvider({ children }) {
     }
   }, [loadExpenses]);
 
+  // Clears ALL expenses for a specific month from both local state and DB
+  const clearMonthExpenses = useCallback(async (gid, month) => {
+    // Optimistic: remove from local state instantly
+    setExpenses(prev => ({
+      ...prev,
+      [gid]: (prev[gid] || []).filter(e => !e.date?.startsWith(month)),
+    }));
+    try {
+      await expensesApi.clearMonth(gid, month);
+    } catch (e) {
+      // Rollback on failure
+      await loadExpenses(gid);
+      throw e;
+    }
+  }, [loadExpenses]);
+
   // ── BUDGET ACTIONS ────────────────────────────────────────────────────────
   const loadBudgets = useCallback(async (gid, month) => {
     const list = await budgetsApi.getAll(gid, month);
@@ -286,7 +312,7 @@ export function AppProvider({ children }) {
     ready, user, theme, groups, setTheme,
     login, signup, logout, updateProfile,
     loadGroups, createGroup, joinGroup, renameGroup, leaveGroup,
-    loadExpenses, addExpense, editExpense, removeExpense, getExpenses,
+    loadExpenses, addExpense, editExpense, removeExpense, getExpenses, clearMonthExpenses,
     loadBudgets, setBudget, getBudget,
     loadSettlements, toggleSettlement, isPaid,
   };

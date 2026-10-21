@@ -67,10 +67,10 @@ npm install
 
 ```js
 // Android Emulator (default):
-export const BASE_URL = 'http://10.0.2.2:5000/api';
+export const BASE_URL = 'https://roomsplit-mobile-app.onrender.com/api';
 
 // Physical Android device (same WiFi — use your machine's IP):
-export const BASE_URL = 'http://192.168.1.X:5000/api';
+export const BASE_URL = 'https://roomsplit-mobile-app.onrender.com/api';
 ```
 
 ```bash

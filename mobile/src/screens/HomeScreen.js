@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  Switch, Alert, StyleSheet, RefreshControl,
+  Switch, Alert, StyleSheet, RefreshControl, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useApp } from '../context/AppContext';
 import { COLORS, PAL } from '../utils/theme';
 import { Btn, Avatar, BottomSheet, GroupCardSkeleton } from '../components/index';
@@ -13,7 +14,7 @@ import { Btn, Avatar, BottomSheet, GroupCardSkeleton } from '../components/index
 // memo() ensures this component only re-renders if its OWN props change.
 // Without memo, every time ANY group changes, ALL group cards re-render.
 // This is the #1 FlatList optimization technique.
-const GroupCard = memo(function GroupCard({ g, index, onPress, surfaceColor, borderColor }) {
+const GroupCard = memo(function GroupCard({ g, index, onPress, surfaceColor, borderColor, textColor, subTextColor }) {
   const col  = PAL[index % PAL.length];
   const mems = g.members || [];
   return (
@@ -26,8 +27,8 @@ const GroupCard = memo(function GroupCard({ g, index, onPress, surfaceColor, bor
         <Text style={{ fontSize: 20 }}>🏠</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 15, fontWeight: '700', color: '#18181A' }}>{g.name}</Text>
-        <Text style={{ fontSize: 12, color: '#65656A', marginTop: 3 }}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: textColor || '#18181A' }}>{g.name}</Text>
+        <Text style={{ fontSize: 12, color: subTextColor || '#65656A', marginTop: 3 }}>
           {mems.length} member{mems.length !== 1 ? 's' : ''}
           <Text style={{ color: '#9898A0' }}>  ·  </Text>
           Code: <Text style={{ fontFamily: 'monospace', fontWeight: '700', color: '#1AAD7D' }}>{g.inviteCode}</Text>
@@ -59,12 +60,15 @@ export default function HomeScreen({ navigation }) {
   const [refreshing,  setRefreshing]  = useState(false);
   const [showCreate,  setShowCreate]  = useState(false);
   const [showJoin,    setShowJoin]    = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [gname,       setGname]       = useState('');
   const [code,        setCode]        = useState('');
   const [newName,     setNewName]     = useState('');
   const [err,         setErr]         = useState('');
   const [busy,        setBusy]        = useState(false);
+  const [scanned,     setScanned]     = useState(false);
+  const [permission,  requestPermission] = useCameraPermissions();
 
   const load = useCallback(async () => {
     try { await loadGroups(); } catch (e) { Alert.alert('Error', e.message); } finally { setLoading(false); }
@@ -88,15 +92,43 @@ export default function HomeScreen({ navigation }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }, [gname, createGroup, navigation]);
 
-  const handleJoin = useCallback(async () => {
-    if (code.trim().length !== 6) return setErr('Enter the 6-character invite code');
+  const handleJoin = useCallback(async (inviteCode) => {
+    const joinCode = (inviteCode || code).trim().toUpperCase();
+    if (joinCode.length !== 6) return setErr('Enter the 6-character invite code');
     setBusy(true); setErr('');
     try {
-      const g = await joinGroup(code.trim().toUpperCase());
-      setCode(''); setShowJoin(false);
+      const g = await joinGroup(joinCode);
+      setCode(''); setShowJoin(false); setShowScanner(false);
       navigation.navigate('Dashboard', { groupId: g._id, groupName: g.name });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }, [code, joinGroup, navigation]);
+
+  const handleScanQR = useCallback(async () => {
+    if (!permission?.granted) {
+      const { granted } = await requestPermission();
+      if (!granted) {
+        Alert.alert('Camera Permission', 'Camera access is required to scan QR codes.');
+        return;
+      }
+    }
+    setScanned(false);
+    setShowJoin(false);
+    setShowScanner(true);
+  }, [permission, requestPermission]);
+
+  const handleBarcodeScanned = useCallback(({ data }) => {
+    if (scanned) return;
+    setScanned(true);
+    setShowScanner(false);
+    // data is the invite code embedded in the QR
+    const trimmed = data?.trim().toUpperCase();
+    if (trimmed?.length === 6) {
+      // Auto-join directly
+      handleJoin(trimmed);
+    } else {
+      Alert.alert('Invalid QR', 'This QR code does not contain a valid RoomSplit invite code.');
+    }
+  }, [scanned, handleJoin]);
 
   const handleUpdateProfile = useCallback(async () => {
     if (!newName.trim()) return setErr('Name cannot be empty');
@@ -128,8 +160,10 @@ export default function HomeScreen({ navigation }) {
       onPress={handleGroupPress}
       surfaceColor={c.surface}
       borderColor={c.border}
+      textColor={c.text}
+      subTextColor={c.text2}
     />
-  ), [handleGroupPress, c.surface, c.border]);
+  ), [handleGroupPress, c.surface, c.border, c.text, c.text2]);
 
   const inputSt = { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, color: c.text };
 
@@ -170,8 +204,9 @@ export default function HomeScreen({ navigation }) {
           <Text style={{ fontSize: 13, color: c.text2, marginTop: 3 }}>{groups.length} group{groups.length !== 1 ? 's' : ''}</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Btn variant="secondary" size="sm" onPress={() => { setShowJoin(true); setErr(''); }}>Join</Btn>
-          <Btn size="sm" onPress={() => { setShowCreate(true); setErr(''); }}>+ New</Btn>
+          <Btn variant="secondary" size="sm" theme={theme} onPress={handleScanQR}>📷 Scan</Btn>
+          <Btn variant="secondary" size="sm" theme={theme} onPress={() => { setShowJoin(true); setErr(''); }}>Join</Btn>
+          <Btn size="sm" theme={theme} onPress={() => { setShowCreate(true); setErr(''); }}>+ New</Btn>
         </View>
       </View>
 
@@ -198,8 +233,8 @@ export default function HomeScreen({ navigation }) {
               <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 8 }}>No groups yet</Text>
               <Text style={{ fontSize: 14, color: c.text2, textAlign: 'center', marginBottom: 24 }}>Create a group and share the invite code with your roommates</Text>
               <View style={{ flexDirection: 'row', gap: 12 }}>
-                <Btn onPress={() => setShowCreate(true)}>Create Group</Btn>
-                <Btn variant="secondary" onPress={() => setShowJoin(true)}>Join Group</Btn>
+                <Btn theme={theme} onPress={() => setShowCreate(true)}>Create Group</Btn>
+                <Btn theme={theme} variant="secondary" onPress={() => setShowJoin(true)}>Join Group</Btn>
               </View>
             </View>
           }
@@ -212,24 +247,45 @@ export default function HomeScreen({ navigation }) {
           value={gname} onChangeText={v => { setGname(v); setErr(''); }} returnKeyType="done" onSubmitEditing={handleCreate} />
         {err ? <Text style={{ color: c.danger, fontSize: 13, marginBottom: 10 }}>{err}</Text> : <View style={{ height: 10 }} />}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Btn variant="secondary" onPress={() => setShowCreate(false)} style={{ flex: 1 }}>Cancel</Btn>
-          <Btn onPress={handleCreate} loading={busy} style={{ flex: 2 }}>Create Group</Btn>
+          <Btn variant="secondary" theme={theme} onPress={() => setShowCreate(false)} style={{ flex: 1 }}>Cancel</Btn>
+          <Btn theme={theme} onPress={handleCreate} loading={busy} style={{ flex: 2 }}>Create Group</Btn>
         </View>
       </BottomSheet>
 
       {/* ── Join Group Sheet ── */}
       <BottomSheet visible={showJoin} title="Join a Group" onClose={() => setShowJoin(false)} theme={theme}>
-        <Text style={{ fontSize: 13, color: c.text2, marginBottom: 14 }}>Ask your roommate for their 6-character invite code.</Text>
+        {/* QR Scan Button */}
+        <TouchableOpacity
+          onPress={handleScanQR}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+            backgroundColor: c.accentBg, borderColor: c.accentBd, borderWidth: 1,
+            borderRadius: 14, paddingVertical: 16, marginBottom: 16 }}
+        >
+          <Text style={{ fontSize: 28 }}>📷</Text>
+          <View>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: c.accent }}>Scan QR Code</Text>
+            <Text style={{ fontSize: 12, color: c.text2, marginTop: 2 }}>Point camera at the group QR</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: c.border }} />
+          <Text style={{ fontSize: 12, color: c.text3 }}>or enter code manually</Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: c.border }} />
+        </View>
+
+        <Text style={{ fontSize: 13, color: c.text2, marginBottom: 10 }}>Enter the 6-character invite code:</Text>
         <TextInput
           style={[inputSt, { textAlign: 'center', letterSpacing: 10, fontFamily: 'monospace', fontSize: 24, marginBottom: 6 }]}
           placeholder="AB12CD" placeholderTextColor={c.text3}
           value={code} onChangeText={v => { setCode(v.toUpperCase()); setErr(''); }}
-          maxLength={6} autoCapitalize="characters" returnKeyType="done" onSubmitEditing={handleJoin}
+          maxLength={6} autoCapitalize="characters" returnKeyType="done" onSubmitEditing={() => handleJoin()}
         />
         {err ? <Text style={{ color: c.danger, fontSize: 13, marginBottom: 10 }}>{err}</Text> : <View style={{ height: 10 }} />}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Btn variant="secondary" onPress={() => setShowJoin(false)} style={{ flex: 1 }}>Cancel</Btn>
-          <Btn onPress={handleJoin} loading={busy} style={{ flex: 2 }}>Join Group</Btn>
+          <Btn variant="secondary" theme={theme} onPress={() => setShowJoin(false)} style={{ flex: 1 }}>Cancel</Btn>
+          <Btn theme={theme} onPress={() => handleJoin()} loading={busy} style={{ flex: 2 }}>Join Group</Btn>
         </View>
       </BottomSheet>
 
@@ -239,8 +295,72 @@ export default function HomeScreen({ navigation }) {
           value={newName} onChangeText={v => { setNewName(v); setErr(''); }} autoCapitalize="words" />
         <Text style={{ fontSize: 12, color: c.text3, marginBottom: 14 }}>Email: {user?.email}</Text>
         {err ? <Text style={{ color: c.danger, fontSize: 13, marginBottom: 10 }}>{err}</Text> : null}
-        <Btn onPress={handleUpdateProfile} loading={busy} full>Save Changes</Btn>
+        <Btn theme={theme} onPress={handleUpdateProfile} loading={busy} full>Save Changes</Btn>
       </BottomSheet>
+
+      {/* ── QR Scanner Modal ── */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          {/* Camera fills the entire screen */}
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+          />
+
+          {/* Overlay sits OUTSIDE CameraView, absolutely positioned on top */}
+          <View style={{ flex: 1, justifyContent: 'space-between' }}>
+            {/* Top bar */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, paddingTop: 56, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Scan QR Code</Text>
+              <TouchableOpacity onPress={() => setShowScanner(false)}
+                style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 }}>
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dimmed sides + viewfinder cutout */}
+            <View style={{ alignItems: 'center' }}>
+              <View style={{ width: 240, height: 240, position: 'relative' }}>
+                {/* Corner brackets */}
+                {[
+                  { top: 0, left: 0 }, { top: 0, right: 0 },
+                  { bottom: 0, left: 0 }, { bottom: 0, right: 0 },
+                ].map((pos, i) => (
+                  <View key={i} style={[{
+                    position: 'absolute', width: 40, height: 40,
+                    borderColor: '#1FD396',
+                    borderTopWidth:    pos.top    !== undefined ? 3 : 0,
+                    borderBottomWidth: pos.bottom !== undefined ? 3 : 0,
+                    borderLeftWidth:   pos.left   !== undefined ? 3 : 0,
+                    borderRightWidth:  pos.right  !== undefined ? 3 : 0,
+                    borderTopLeftRadius:     (pos.top    !== undefined && pos.left  !== undefined) ? 8 : 0,
+                    borderTopRightRadius:    (pos.top    !== undefined && pos.right !== undefined) ? 8 : 0,
+                    borderBottomLeftRadius:  (pos.bottom !== undefined && pos.left  !== undefined) ? 8 : 0,
+                    borderBottomRightRadius: (pos.bottom !== undefined && pos.right !== undefined) ? 8 : 0,
+                  }, pos]} />
+                ))}
+              </View>
+            </View>
+
+            {/* Bottom hint */}
+            <View style={{ alignItems: 'center', paddingBottom: 60, backgroundColor: 'rgba(0,0,0,0.45)', paddingTop: 24 }}>
+              <Text style={{ color: '#fff', fontSize: 14, opacity: 0.85, textAlign: 'center', paddingHorizontal: 40 }}>
+                Point your camera at a RoomSplit group QR code
+              </Text>
+              {scanned && (
+                <TouchableOpacity
+                  onPress={() => setScanned(false)}
+                  style={{ marginTop: 16, backgroundColor: '#1FD396', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 10 }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Tap to Scan Again</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -17,7 +17,7 @@ export const fmtTime = iso =>
 
 export const fmtMonth = (offset = 0) => {
   const d = new Date(); d.setMonth(d.getMonth() + offset);
-  return d.toLocaleDateString('en-IN', { month:'long', year:'numeric' });
+  return d.toLocaleDateString('en-IN', { month:'short', year:'2-digit' }).replace(' ', " '");
 };
 
 export const relTime = iso => {

@@ -5,6 +5,7 @@ import {
   StyleSheet, Animated, FlatList,
 } from 'react-native';
 import { COLORS, catOf, PAL, palOf } from '../utils/theme';
+import { useApp } from '../context/AppContext';
 
 /* ────────────────────────────────────────────────
    HOOK: get theme colors
@@ -70,13 +71,21 @@ export function ExpenseItemSkeleton() {
 /* ────────────────────────────────────────────────
    BUTTON
 ──────────────────────────────────────────────── */
-export function Btn({ children, onPress, variant = 'primary', size = 'md', full, disabled, loading, style }) {
+export function Btn({ children, onPress, variant = 'primary', size = 'md', full, disabled, loading, style, theme }) {
+  let appTheme = 'light';
+  try {
+    const app = useApp();
+    if (app?.theme) appTheme = app.theme;
+  } catch (_) {}
+  const activeTheme = theme || appTheme || 'light';
+  const c = COLORS[activeTheme] || COLORS.light;
+
   const variants = {
     primary:   { bg: '#1AAD7D',     text: '#fff',     border: '#1AAD7D' },
-    secondary: { bg: 'transparent', text: '#18181A',  border: '#CACAC3' },
-    danger:    { bg: 'transparent', text: '#C53030',  border: '#F9A8A8' },
-    ghost:     { bg: 'transparent', text: '#65656A',  border: 'transparent' },
-    accent:    { bg: '#E0F7EE',     text: '#1AAD7D',  border: '#9FE1C8' },
+    secondary: { bg: 'transparent', text: c.text,     border: c.border2 },
+    danger:    { bg: 'transparent', text: c.danger,   border: c.dangerBd },
+    ghost:     { bg: 'transparent', text: c.text2,    border: 'transparent' },
+    accent:    { bg: c.accentBg,    text: c.accent,   border: c.accentBd },
   };
 
   const sizes = {

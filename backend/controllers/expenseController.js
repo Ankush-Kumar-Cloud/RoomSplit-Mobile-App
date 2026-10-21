@@ -150,3 +150,29 @@ exports.deleteExpense = async (req, res) => {
     res.json({ message: 'Deleted' });
   } catch (e) { res.status(500).json({ message: e.message }); }
 };
+
+// ── DELETE All Expenses for a Month ─────────────────────────────────────────
+// Deletes every expense in the group whose date starts with YYYY-MM.
+// Any group member can trigger this (can tighten to owner-only if preferred).
+exports.clearMonthExpenses = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { month } = req.query; // expected format: YYYY-MM
+
+    if (!month || !/^\d{4}-\d{2}$/.test(month))
+      return res.status(400).json({ message: 'month query param required (YYYY-MM)' });
+
+    await assertMember(groupId, req.user._id);
+
+    // deleteMany is a single DB round-trip and uses the (group, date) index
+    const result = await Expense.deleteMany({
+      group: groupId,
+      date: { $regex: `^${month}` },
+    });
+
+    const io = req.app.get('io');
+    if (io) io.to(groupId).emit('expensesCleared', { groupId, month });
+
+    res.json({ message: 'Cleared', deletedCount: result.deletedCount });
+  } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
+};

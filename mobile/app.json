@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon1.png",
     "splash": {
       "backgroundColor": "#1AAD7D"
     },
@@ -13,7 +13,7 @@
       "package": "com.ankush.splitmate",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon1.png",
         "backgroundColor": "#1AAD7D"
       }
     },
@@ -24,6 +24,16 @@
       "eas": {
         "projectId": "e282bb10-23ad-49c8-974e-c8a0d2241ceb"
       }
-    }
+    },
+    "plugins": [
+      "expo-status-bar",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SplitMate to access your camera to scan QR codes.",
+          "microphonePermission": false
+        }
+      ]
+    ]
   }
 }

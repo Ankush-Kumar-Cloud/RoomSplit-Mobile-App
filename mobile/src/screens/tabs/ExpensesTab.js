@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
 import {
   View, Text, TouchableOpacity, TextInput, Alert,
-  StyleSheet, ScrollView, FlatList, RefreshControl,
+  StyleSheet, ScrollView, RefreshControl,
 } from "react-native";
 
 import { useApp } from "../../context/AppContext";
 import { COLORS, CATS, PAL } from "../../utils/theme";
-import { today, monthKey, fmtDate, fmtTime, filterExpenses } from "../../utils/domain";
+import { today, monthKey, fmtDate, fmtTime, fmtMonth, filterExpenses } from "../../utils/domain";
 import { Avatar, CatChip, BottomSheet, ExpenseForm, ExpenseItemSkeleton } from "../../components/index";
 
 // ── Memoized Expense Row ─────────────────────────────────────────────────────
-// This is the most important optimization: with memo, only the expense that
-// was edited will re-render, not the entire list of 200 items.
 const ExpenseRow = memo(function ExpenseRow({ exp, isMe, col, c, onEdit, onDelete }) {
   return (
     <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: c.border }}>
@@ -54,8 +52,8 @@ const ExpenseRow = memo(function ExpenseRow({ exp, isMe, col, c, onEdit, onDelet
   prev.isMe === next.isMe
 );
 
-// ── Member Summary Card (horizontal scroll) ──────────────────────────────────
-const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spent, total, isActive, onPress }) {
+// ── Member Summary Card ──────────────────────────────────────────────────────
+const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spent, isActive, onPress }) {
   return (
     <TouchableOpacity
       onPress={() => onPress(m._id)}
@@ -66,7 +64,7 @@ const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spen
       <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "700", color: col.dark, marginTop: 6, textAlign: "center" }}>
         {m.name}
       </Text>
-      <Text style={{ fontSize: 24, fontWeight: "800", color: col.dark, marginTop: 4 }}>₹{spent.toFixed(0)}</Text>
+      <Text style={{ fontSize: 22, fontWeight: "800", color: col.dark, marginTop: 4 }}>₹{spent.toFixed(0)}</Text>
       <Text style={{ fontSize: 11, color: col.mid, opacity: 0.8, marginTop: 2 }}>This Month</Text>
       {budget > 0 && (
         <View style={{ width: "100%", height: 5, backgroundColor: "rgba(255,255,255,.4)", borderRadius: 99, marginTop: 8, overflow: "hidden" }}>
@@ -77,19 +75,22 @@ const MemberSummaryCard = memo(function MemberSummaryCard({ m, col, budget, spen
   );
 });
 
-export default function ExpensesTab({ group, members }) {
+// ── Main Tab ─────────────────────────────────────────────────────────────────
+export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
   const { theme, user, getExpenses, loadExpenses, addExpense, editExpense, removeExpense, getBudget } = useApp();
   const c = COLORS[theme];
   const gid = group._id;
-  const mk = monthKey(0);
 
-  const [loading,  setLoading]  = useState(true);
+  // monthOff & setMonthOff come from DashboardScreen (bar lives above tab strip)
+  const mk = monthKey(monthOff);
+
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [srch,     setSrch]     = useState("");
-  const [catF,     setCatF]     = useState("");
-  const [showAdd,  setShowAdd]  = useState(false);
-  const [editing,  setEditing]  = useState(null);
-  const [showCats, setShowCats] = useState(false);
+  const [srch,       setSrch]       = useState("");
+  const [catF,       setCatF]       = useState("");
+  const [showAdd,    setShowAdd]    = useState(false);
+  const [editing,    setEditing]    = useState(null);
+  const [showCats,   setShowCats]   = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
 
   useEffect(() => {
@@ -107,32 +108,32 @@ export default function ExpensesTab({ group, members }) {
   const todayStr = today();
   const activeMemberId = selectedMemberId || meId;
 
-  const allTotals = useMemo(() => {
-    const t = {};
-    all.forEach(e => {
-      const uid = e.user?._id || e.user;
-      t[uid] = (t[uid] || 0) + e.amount;
-    });
-    return t;
-  }, [all]);
+  // ── Expenses for selected month
+  const monthExpenses = useMemo(() => all.filter(e => e.date?.startsWith(mk)), [all, mk]);
 
+  // ── Monthly totals per member
   const monTotals = useMemo(() => {
     const t = {};
-    all.filter(e => e.date?.startsWith(mk)).forEach(e => {
+    monthExpenses.forEach(e => {
       const uid = e.user?._id || e.user;
       t[uid] = (t[uid] || 0) + e.amount;
     });
     return t;
-  }, [all, mk]);
+  }, [monthExpenses]);
 
+  // ── Grand total for the month
+  const monthGrandTotal = useMemo(() => Object.values(monTotals).reduce((s, v) => s + v, 0), [monTotals]);
+
+  // ── Today totals per member (only when viewing current month)
   const todayTotals = useMemo(() => {
+    if (monthOff !== 0) return {};
     const t = {};
     all.filter(e => e.date === todayStr).forEach(e => {
       const uid = e.user?._id || e.user;
       t[uid] = (t[uid] || 0) + e.amount;
     });
     return t;
-  }, [all, todayStr]);
+  }, [all, todayStr, monthOff]);
 
   const orderedExpenseMembers = useMemo(() => {
     if (!members) return [];
@@ -143,7 +144,8 @@ export default function ExpensesTab({ group, members }) {
     return activeUser ? [activeUser, ...others] : members;
   }, [members, activeMemberId]);
 
-  const filtered = useMemo(() => filterExpenses(all, { cat: catF, search: srch }), [all, catF, srch]);
+  // Filter only the current month's expenses
+  const filtered = useMemo(() => filterExpenses(monthExpenses, { cat: catF, search: srch }), [monthExpenses, catF, srch]);
 
   const handleDelete = useCallback((exp) => {
     Alert.alert("Delete Expense?", `"${exp.item}" will be permanently deleted.`, [
@@ -156,19 +158,17 @@ export default function ExpensesTab({ group, members }) {
   }, [gid, removeExpense]);
 
   const handleEdit = useCallback((exp) => setEditing(exp), []);
-
   const handleMemberPress = useCallback((uid) => setSelectedMemberId(uid), []);
+
 
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg }}>
-        {/* Skeleton for member cards */}
         <View style={{ flexDirection: 'row', padding: 14, gap: 10 }}>
           {[1, 2, 3].map(i => (
             <View key={i} style={{ width: 105, height: 120, borderRadius: 16, backgroundColor: '#F3F4F6' }} />
           ))}
         </View>
-        {/* Skeleton for expense rows */}
         <View style={{ borderRadius: 22, marginHorizontal: 12, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
           {[1, 2, 3, 4].map(i => <ExpenseItemSkeleton key={i} />)}
         </View>
@@ -178,11 +178,13 @@ export default function ExpensesTab({ group, members }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
+
+
       {/* ───── MEMBER SUMMARY ───── */}
       <View style={{ backgroundColor: c.bg, paddingBottom: 6 }}>
         <ScrollView
           horizontal
-          style={{ maxHeight: 150 }}
+          style={{ maxHeight: 155 }}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 16, gap: 10 }}
         >
@@ -195,7 +197,6 @@ export default function ExpensesTab({ group, members }) {
                 col={col}
                 budget={getBudget(gid, m._id, mk)}
                 spent={monTotals[m._id] || 0}
-                total={allTotals[m._id] || 0}
                 isActive={activeMemberId === m._id}
                 onPress={handleMemberPress}
               />
@@ -225,9 +226,12 @@ export default function ExpensesTab({ group, members }) {
           onPress={() => setShowCats(!showCats)}
           style={[s.filterBtn, { backgroundColor: catF ? c.accentBg : c.surface2, borderColor: catF ? c.accentBd : c.border }]}
         >
-          <Text style={{ fontSize: 12, fontWeight: "600", color: catF ? c.accent : c.text2 }}>
-            {catF ? CATS.find(x => x.id === catF)?.icon + " " + CATS.find(x => x.id === catF)?.label : "⚡ Filter"}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 13 }}>{catF ? (CATS.find(x => x.id === catF)?.icon || "⚡") : "⚡"}</Text>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: catF ? c.accent : c.text2 }}>
+              {catF ? (CATS.find(x => x.id === catF)?.label || "Filter") : "Filter"}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -242,11 +246,25 @@ export default function ExpensesTab({ group, members }) {
               <TouchableOpacity key={cat.id}
                 onPress={() => { setCatF(cat.id); setShowCats(false); }}
                 activeOpacity={0.7}
-                style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 99, borderWidth: 1,
-                  backgroundColor: isSel ? (cat.bg || c.accentBg) : "transparent",
-                  borderColor: isSel ? (cat.color || c.accent) : c.border }}>
-                <Text style={{ fontSize: 13, marginRight: 6, color: isSel ? (cat.color || c.accent) : c.text2 }}>{cat.icon}</Text>
-                <Text style={{ fontSize: 13, fontWeight: isSel ? "700" : "500", color: isSel ? (cat.color || c.accent) : c.text2 }}>{cat.label}</Text>
+                style={{
+                  flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 99, borderWidth: 1,
+                  backgroundColor: isSel
+                    ? (theme === 'dark' ? c.accentBg : (cat.bg || c.accentBg))
+                    : (theme === 'dark' ? c.surface : '#fff'),
+                  borderColor: isSel
+                    ? (theme === 'dark' ? c.accent : (cat.color || c.accent))
+                    : c.border,
+                }}>
+                <Text style={{ fontSize: 15, marginRight: 6 }}>{cat.icon}</Text>
+                <Text style={{
+                  fontSize: 13,
+                  fontWeight: isSel ? "700" : "500",
+                  color: isSel
+                    ? (theme === 'dark' ? c.accent : (cat.color || c.accent))
+                    : c.text,
+                }}>
+                  {cat.label}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -259,13 +277,27 @@ export default function ExpensesTab({ group, members }) {
         contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />}
       >
+        {/* No expenses for this month */}
+        {monthExpenses.length === 0 && (
+          <View style={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 32 }}>
+            <Text style={{ fontSize: 44, marginBottom: 14 }}>📭</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, textAlign: 'center' }}>
+              No expenses in {fmtMonth(monthOff)}
+            </Text>
+            <Text style={{ fontSize: 13, color: c.text2, marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
+              {monthOff === 0 ? 'Tap + to add your first expense this month.' : 'Use the arrows to go to another month.'}
+            </Text>
+          </View>
+        )}
+
         {orderedExpenseMembers.map((member, index) => {
           const uid = member._id;
           const col = PAL[index % PAL.length];
           const memberExpenses = filtered.filter(e => (e.user?._id || e.user) === uid);
-          const totalSpent = allTotals[uid] || 0;
           const monthTotal = monTotals[uid] || 0;
           const todayTotal = todayTotals[uid] || 0;
+
+          if (memberExpenses.length === 0 && monthExpenses.length === 0) return null;
 
           return (
             <View key={uid} style={{ marginHorizontal: 12, marginBottom: 16, borderRadius: 22, overflow: "hidden", borderWidth: 1, borderColor: col.border, backgroundColor: c.surface }}>
@@ -280,16 +312,30 @@ export default function ExpensesTab({ group, members }) {
                     </Text>
                   </View>
                 </View>
-                <View style={{ marginTop: 14, backgroundColor: "#fff", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ fontSize: 14, color: c.text2 }}>Today: ₹{todayTotal}</Text>
-                  <Text style={{ fontSize: 28, fontWeight: "800", color: col.dark }}>₹{todayTotal}</Text>
+
+                {/* Stats row */}
+                <View style={{ marginTop: 14, backgroundColor: c.surface, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, color: c.text2, marginBottom: 2 }}>Month Total</Text>
+                    <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>₹{monthTotal}</Text>
+                  </View>
+                  {monthOff === 0 && (
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 11, color: c.text2, marginBottom: 2 }}>Today</Text>
+                      <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>₹{todayTotal}</Text>
+                    </View>
+                  )}
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, color: c.text2, marginBottom: 2 }}>Entries</Text>
+                    <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>{memberExpenses.length}</Text>
+                  </View>
                 </View>
               </View>
 
-              {/* EXPENSES — rendered individually with memoized rows */}
+              {/* EXPENSES */}
               {memberExpenses.length === 0 ? (
                 <View style={{ padding: 18, alignItems: "center" }}>
-                  <Text style={{ color: c.text3 }}>No expenses</Text>
+                  <Text style={{ color: c.text3 }}>No expenses this month</Text>
                 </View>
               ) : (
                 memberExpenses.map(exp => (
@@ -309,10 +355,12 @@ export default function ExpensesTab({ group, members }) {
         })}
       </ScrollView>
 
-      {/* ───── FAB ───── */}
-      <TouchableOpacity onPress={() => setShowAdd(true)} style={[s.fab, { backgroundColor: c.accent }]}>
-        <Text style={{ color: "#fff", fontSize: 30, lineHeight: 34, fontWeight: "300" }}>+</Text>
-      </TouchableOpacity>
+      {/* ───── FAB (only show for current month) ───── */}
+      {monthOff === 0 && (
+        <TouchableOpacity onPress={() => setShowAdd(true)} style={[s.fab, { backgroundColor: c.accent }]}>
+          <Text style={{ color: "#fff", fontSize: 30, lineHeight: 34, fontWeight: "300" }}>+</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ───── ADD SHEET ───── */}
       <BottomSheet visible={showAdd} title="Add Expense" onClose={() => setShowAdd(false)} theme={theme} tall>
@@ -352,10 +400,10 @@ export default function ExpensesTab({ group, members }) {
 }
 
 const s = StyleSheet.create({
-  summCard: { width: 105, height: 120, borderRadius: 16, padding: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  filterBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderBottomWidth: 1 },
-  searchBox: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 10, height: 42 },
-  filterBtn: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, justifyContent: "center", alignItems: "center", height: 42 },
-  actBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  fab: { position: "absolute", bottom: 24, right: 20, width: 58, height: 58, borderRadius: 30, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  summCard:   { width: 110, height: 130, borderRadius: 16, padding: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  filterBar:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderBottomWidth: 1 },
+  searchBox:  { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 10, height: 42 },
+  filterBtn:  { borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, justifyContent: "center", alignItems: "center", height: 42 },
+  actBtn:     { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  fab:        { position: "absolute", bottom: 24, right: 20, width: 58, height: 58, borderRadius: 30, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
 });

@@ -377,9 +377,9 @@ export function SettlementTab({ group, members }) {
                 <Avatar name={txn.from} col={fc} size={36} />
                 <View style={{ flex:1 }}>
                   <Text style={{ fontSize:14, color:c.text, flexWrap:'wrap' }}>
-                    <Text style={{ color:fc.dark, fontWeight:'700' }}>{txn.from}</Text>
-                    <Text style={{ color:c.text3 }}> pays </Text>
-                    <Text style={{ color:tc.dark, fontWeight:'700' }}>{txn.to}</Text>
+                    <Text style={{ color: theme === 'dark' ? (fc.border || fc.mid) : fc.dark, fontWeight:'700' }}>{txn.from}</Text>
+                    <Text style={{ color: c.text2, fontWeight: '500' }}> pays </Text>
+                    <Text style={{ color: theme === 'dark' ? (tc.border || tc.mid) : tc.dark, fontWeight:'700' }}>{txn.to}</Text>
                   </Text>
                   {paid && <Text style={{ fontSize:11, color:c.accent, fontWeight:'700', marginTop:3 }}>✓ Marked as paid</Text>}
                 </View>
