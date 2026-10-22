@@ -10,7 +10,7 @@ import { today, monthKey, fmtDate, fmtTime, fmtMonth, filterExpenses } from "../
 import { Avatar, CatChip, BottomSheet, ExpenseForm, ExpenseItemSkeleton } from "../../components/index";
 
 // ── Memoized Expense Row ─────────────────────────────────────────────────────
-const ExpenseRow = memo(function ExpenseRow({ exp, isMe, col, c, onEdit, onDelete }) {
+const ExpenseRow = memo(function ExpenseRow({ exp, canEdit, canDelete, col, c, onEdit, onDelete }) {
   return (
     <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: c.border }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
@@ -33,14 +33,18 @@ const ExpenseRow = memo(function ExpenseRow({ exp, isMe, col, c, onEdit, onDelet
         <Text style={{ fontSize: 18, fontWeight: "700", color: col.mid }}>₹{exp.amount}</Text>
       </View>
 
-      {isMe && (
+      {(canEdit || canDelete) && (
         <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-          <TouchableOpacity onPress={() => onEdit(exp)} style={[s.actBtn, { borderColor: c.border2, opacity: 0.75 }]}>
-            <Text style={{ color: c.text2, fontWeight: "500" }}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(exp)} style={[s.actBtn, { borderColor: c.dangerBd, opacity: 0.75 }]}>
-            <Text style={{ color: c.danger, fontWeight: "500" }}>Delete</Text>
-          </TouchableOpacity>
+          {canEdit && (
+            <TouchableOpacity onPress={() => onEdit(exp)} style={[s.actBtn, { borderColor: c.border2, opacity: 0.75 }]}>
+              <Text style={{ color: c.text2, fontWeight: "500" }}>Edit</Text>
+            </TouchableOpacity>
+          )}
+          {canDelete && (
+            <TouchableOpacity onPress={() => onDelete(exp)} style={[s.actBtn, { borderColor: c.dangerBd, opacity: 0.75 }]}>
+              <Text style={{ color: c.danger, fontWeight: "500" }}>Delete</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </View>
@@ -49,7 +53,8 @@ const ExpenseRow = memo(function ExpenseRow({ exp, isMe, col, c, onEdit, onDelet
   prev.exp._id === next.exp._id &&
   prev.exp.amount === next.exp.amount &&
   prev.exp.item === next.exp.item &&
-  prev.isMe === next.isMe
+  prev.canEdit === next.canEdit &&
+  prev.canDelete === next.canDelete
 );
 
 // ── Member Summary Card ──────────────────────────────────────────────────────
@@ -105,6 +110,7 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
 
   const all = getExpenses(gid);
   const meId = user?._id;
+  const isOwner = (group?.owner?._id || group?.owner)?.toString() === meId?.toString();
   const todayStr = today();
   const activeMemberId = selectedMemberId || meId;
 
@@ -338,17 +344,21 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
                   <Text style={{ color: c.text3 }}>No expenses this month</Text>
                 </View>
               ) : (
-                memberExpenses.map(exp => (
-                  <ExpenseRow
-                    key={exp._id}
-                    exp={exp}
-                    col={col}
-                    c={c}
-                    isMe={(exp.user?._id || exp.user) === meId}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                ))
+                memberExpenses.map(exp => {
+                  const isExpMe = (exp.user?._id || exp.user) === meId;
+                  return (
+                    <ExpenseRow
+                      key={exp._id}
+                      exp={exp}
+                      col={col}
+                      c={c}
+                      canEdit={isExpMe}
+                      canDelete={isExpMe || isOwner}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  );
+                })
               )}
             </View>
           );

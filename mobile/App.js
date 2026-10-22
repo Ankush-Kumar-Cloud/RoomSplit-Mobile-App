@@ -12,6 +12,7 @@ import { AppProvider, useApp } from './src/context/AppContext';
 import AuthScreen      from './src/screens/AuthScreen';
 import HomeScreen      from './src/screens/HomeScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
+import UpdatePrompt    from './src/components/UpdatePrompt';
 
 const Stack = createNativeStackNavigator();
 
@@ -35,6 +36,7 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
+      <UpdatePrompt theme={theme} />
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         {!user ? (
           <Stack.Screen name="Auth" component={AuthScreen} />

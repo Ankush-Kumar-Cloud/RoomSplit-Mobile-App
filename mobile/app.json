@@ -5,17 +5,17 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/icon1.png",
-    "splash": {
-      "backgroundColor": "#1AAD7D"
-    },
+    "platforms": ["android", "ios"],
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.ankush.splitmate",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon1.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1AAD7D"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.ankush.splitmate"
@@ -33,7 +33,23 @@
           "cameraPermission": "Allow SplitMate to access your camera to scan QR codes.",
           "microphonePermission": false
         }
-      ]
-    ]
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#1AAD7D",
+          "resizeMode": "contain",
+          "imageWidth": 200
+        }
+      ],
+      "expo-font"
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e282bb10-23ad-49c8-974e-c8a0d2241ceb"
+    }
   }
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  Switch, Alert, StyleSheet, RefreshControl, Modal,
+  Switch, Alert, StyleSheet, RefreshControl, Modal, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -68,7 +68,17 @@ export default function HomeScreen({ navigation }) {
   const [err,         setErr]         = useState('');
   const [busy,        setBusy]        = useState(false);
   const [scanned,     setScanned]     = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const [permission,  requestPermission] = useCameraPermissions();
+
+  useEffect(() => {
+    if (showScanner) {
+      const t = setTimeout(() => setCameraActive(true), 150);
+      return () => clearTimeout(t);
+    } else {
+      setCameraActive(false);
+    }
+  }, [showScanner]);
 
   const load = useCallback(async () => {
     try { await loadGroups(); } catch (e) { Alert.alert('Error', e.message); } finally { setLoading(false); }
@@ -104,26 +114,36 @@ export default function HomeScreen({ navigation }) {
   }, [code, joinGroup, navigation]);
 
   const handleScanQR = useCallback(async () => {
-    if (!permission?.granted) {
-      const { granted } = await requestPermission();
-      if (!granted) {
+    let hasPerm = permission?.granted;
+    if (!hasPerm) {
+      const res = await requestPermission();
+      hasPerm = res?.granted;
+      if (!hasPerm) {
         Alert.alert('Camera Permission', 'Camera access is required to scan QR codes.');
         return;
       }
     }
     setScanned(false);
     setShowJoin(false);
-    setShowScanner(true);
+    // Allow Android BottomSheet dialog to fully dismiss before presenting Scanner modal
+    setTimeout(() => {
+      setShowScanner(true);
+    }, 250);
   }, [permission, requestPermission]);
 
   const handleBarcodeScanned = useCallback(({ data }) => {
     if (scanned) return;
     setScanned(true);
+    setCameraActive(false);
     setShowScanner(false);
     // data is the invite code embedded in the QR
-    const trimmed = data?.trim().toUpperCase();
+    let trimmed = data?.trim().toUpperCase();
+    if (trimmed && trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      trimmed = parts.filter(Boolean).pop();
+    }
     if (trimmed?.length === 6) {
-      // Auto-join directly
+      setCode(trimmed);
       handleJoin(trimmed);
     } else {
       Alert.alert('Invalid QR', 'This QR code does not contain a valid RoomSplit invite code.');
@@ -299,29 +319,50 @@ export default function HomeScreen({ navigation }) {
       </BottomSheet>
 
       {/* ── QR Scanner Modal ── */}
-      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+      <Modal
+        visible={showScanner}
+        animationType="slide"
+        onShow={() => setCameraActive(true)}
+        onRequestClose={() => {
+          setCameraActive(false);
+          setShowScanner(false);
+        }}
+      >
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-          {/* Camera fills the entire screen */}
-          <CameraView
-            style={StyleSheet.absoluteFillObject}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-          />
+          {/* Camera mounted only when modal is fully ready and permission granted */}
+          {cameraActive && permission?.granted ? (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+              onMountError={(e) => {
+                console.warn('Camera mount error:', e);
+                Alert.alert('Camera Error', 'Could not open camera preview.');
+              }}
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
+              <ActivityIndicator size="large" color="#1FD396" />
+              <Text style={{ color: '#fff', fontSize: 13, marginTop: 12, opacity: 0.8 }}>
+                Starting camera preview…
+              </Text>
+            </View>
+          )}
 
           {/* Overlay sits OUTSIDE CameraView, absolutely positioned on top */}
-          <View style={{ flex: 1, justifyContent: 'space-between' }}>
+          <View style={[StyleSheet.absoluteFill, { justifyContent: 'space-between' }]} pointerEvents="box-none">
             {/* Top bar */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, paddingTop: 56, backgroundColor: 'rgba(0,0,0,0.45)' }}>
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Scan QR Code</Text>
-              <TouchableOpacity onPress={() => setShowScanner(false)}
+              <TouchableOpacity onPress={() => { setCameraActive(false); setShowScanner(false); }}
                 style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 }}>
                 <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
             {/* Dimmed sides + viewfinder cutout */}
-            <View style={{ alignItems: 'center' }}>
+            <View style={{ alignItems: 'center' }} pointerEvents="none">
               <View style={{ width: 240, height: 240, position: 'relative' }}>
                 {/* Corner brackets */}
                 {[

@@ -5,12 +5,21 @@ import { io } from "socket.io-client";
 // Change this to your machine's IP when testing on a physical device
 // Android emulator: 10.0.2.2 maps to localhost on host machine
 // Physical device on same WiFi: use your machine's local IP e.g. 192.168.1.5
-// ──────────────────────────────────────────────
-// export const BASE_URL = 'https://roomsplit-mobile-app.onrender.com/api';
-// export const SOCKET_URL = 'https://roomsplit-mobile-app.onrender.com';
+import Constants, { ExecutionEnvironment } from "expo-constants";
 
-export const BASE_URL = "http://10.110.171.52:5000/api";
-export const SOCKET_URL = "http://10.110.171.52.52:5000";
+// ONLY use local IP when running inside the Expo Go app.
+// In ANY installed standalone APK, ALWAYS use the production Render backend.
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+const PROD_BASE_URL = "https://roomsplit-mobile-app.onrender.com/api";
+const PROD_SOCKET_URL = "https://roomsplit-mobile-app.onrender.com";
+
+const LOCAL_IP = "10.98.129.52"; // Update if local machine IP changes
+const DEV_BASE_URL = `http://${LOCAL_IP}:5000/api`;
+const DEV_SOCKET_URL = `http://${LOCAL_IP}:5000`;
+
+export const BASE_URL = isExpoGo ? DEV_BASE_URL : PROD_BASE_URL;
+export const SOCKET_URL = isExpoGo ? DEV_SOCKET_URL : PROD_SOCKET_URL;
 
 export const socket = io(SOCKET_URL, {
   autoConnect: false, // Connect manually when authenticated

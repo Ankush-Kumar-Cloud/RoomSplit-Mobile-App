@@ -230,32 +230,37 @@ export function AppProvider({ children }) {
   }, []);
 
   const removeExpense = useCallback(async (gid, eid) => {
-    // Optimistic local update — remove from list immediately, no waiting for server
-    setExpenses(prev => ({ ...prev, [gid]: (prev[gid] || []).filter(e => e._id !== eid) }));
+    let prevList = [];
+    setExpenses(prev => {
+      prevList = prev[gid] || [];
+      return { ...prev, [gid]: prevList.filter(e => e._id !== eid) };
+    });
     try {
       await expensesApi.delete(gid, eid);
     } catch (e) {
-      // Rollback on failure — this is proper optimistic UI
-      await loadExpenses(gid);
+      // Instantly restore previous state from in-memory backup on error
+      setExpenses(prev => ({ ...prev, [gid]: prevList }));
       throw e;
     }
-  }, [loadExpenses]);
+  }, []);
 
   // Clears ALL expenses for a specific month from both local state and DB
   const clearMonthExpenses = useCallback(async (gid, month) => {
-    // Optimistic: remove from local state instantly
-    setExpenses(prev => ({
-      ...prev,
-      [gid]: (prev[gid] || []).filter(e => !e.date?.startsWith(month)),
-    }));
+    let prevList = [];
+    setExpenses(prev => {
+      prevList = prev[gid] || [];
+      return {
+        ...prev,
+        [gid]: prevList.filter(e => !e.date?.startsWith(month)),
+      };
+    });
     try {
       await expensesApi.clearMonth(gid, month);
     } catch (e) {
-      // Rollback on failure
-      await loadExpenses(gid);
+      setExpenses(prev => ({ ...prev, [gid]: prevList }));
       throw e;
     }
-  }, [loadExpenses]);
+  }, []);
 
   // ── BUDGET ACTIONS ────────────────────────────────────────────────────────
   const loadBudgets = useCallback(async (gid, month) => {
