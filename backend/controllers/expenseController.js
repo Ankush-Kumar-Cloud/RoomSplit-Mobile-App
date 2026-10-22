@@ -139,14 +139,25 @@ exports.updateExpense = async (req, res) => {
 // ── DELETE Expense ────────────────────────────────────────────────────────
 exports.deleteExpense = async (req, res) => {
   try {
-    // Atomic: find AND verify ownership in one query instead of two
-    const exp = await Expense.findOneAndDelete({
-      _id: req.params.expenseId,
-      user: req.user._id,
-    });
+    const { groupId, expenseId } = req.params;
+
+    // Check if user is group owner or creator of expense
+    const group = await Group.findById(groupId).select('owner').lean();
+    if (!group) return res.status(404).json({ message: 'Group not found' });
+
+    const isOwner = group.owner?.toString() === req.user._id.toString();
+
+    const query = { _id: expenseId, group: groupId };
+    if (!isOwner) {
+      // Non-owners can only delete their own expenses
+      query.user = req.user._id;
+    }
+
+    const exp = await Expense.findOneAndDelete(query);
     if (!exp) return res.status(404).json({ message: 'Expense not found or not authorized' });
+
     const io = req.app.get('io');
-    if (io) io.to(req.params.groupId).emit('expenseDeleted', { _id: exp._id });
+    if (io) io.to(groupId).emit('expenseDeleted', { _id: exp._id });
     res.json({ message: 'Deleted' });
   } catch (e) { res.status(500).json({ message: e.message }); }
 };
