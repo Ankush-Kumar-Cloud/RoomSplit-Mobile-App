@@ -54,29 +54,6 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (user) {
       socket.connect();
-      
-      // Register for Push Notifications
-      /*
-      (async () => {
-        if (Device.isDevice) {
-          const { status: existingStatus } = await Notifications.getPermissionsAsync();
-          let finalStatus = existingStatus;
-          if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-          }
-          if (finalStatus === 'granted') {
-            try {
-              const token = (await Notifications.getExpoPushTokenAsync({
-                 // No projectId needed if running in Expo Go without EAS configured yet
-              })).data;
-              await authApi.updatePushToken(token);
-            } catch (e) { console.log('Push token err', e); }
-          }
-        }
-      })();
-      */
-
     } else {
       socket.disconnect();
     }
@@ -171,6 +148,26 @@ export function AppProvider({ children }) {
     return u;
   }, []);
 
+  const forgotPassword = useCallback(async (email) => {
+    return await authApi.forgotPassword(email);
+  }, []);
+
+  const loginWithOtp = useCallback(async (email, otp) => {
+    const u = await authApi.loginWithOtp(email, otp);
+    setUser(u);
+    return u;
+  }, []);
+
+  const resetPassword = useCallback(async (email, otp, newPassword) => {
+    const u = await authApi.resetPassword(email, otp, newPassword);
+    setUser(u);
+    return u;
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    return await authApi.changePassword(currentPassword, newPassword);
+  }, []);
+
   const updateProfile = useCallback(async (name) => {
     const u = await authApi.updateMe(name);
     setUser(u);
@@ -209,7 +206,6 @@ export function AppProvider({ children }) {
 
   // ── EXPENSE ACTIONS ───────────────────────────────────────────────────────
   const loadExpenses = useCallback(async (gid, filters = {}) => {
-    // The API now returns { data, nextCursor }. We flatten `data` for backward compat.
     const res = await expensesApi.getAll(gid, filters);
     const list = Array.isArray(res) ? res : (res.data || []);
     setExpenses(prev => ({ ...prev, [gid]: list }));
@@ -218,7 +214,6 @@ export function AppProvider({ children }) {
 
   const addExpense = useCallback(async (gid, form) => {
     const exp = await expensesApi.create(gid, form);
-    // Optimistic local update — add to the front of the list immediately
     setExpenses(prev => ({ ...prev, [gid]: [exp, ...(prev[gid] || [])] }));
     return exp;
   }, []);
@@ -238,7 +233,6 @@ export function AppProvider({ children }) {
     try {
       await expensesApi.delete(gid, eid);
     } catch (e) {
-      // Instantly restore previous state from in-memory backup on error
       setExpenses(prev => ({ ...prev, [gid]: prevList }));
       throw e;
     }
@@ -316,6 +310,7 @@ export function AppProvider({ children }) {
   const value = {
     ready, user, theme, groups, setTheme,
     login, signup, logout, updateProfile,
+    forgotPassword, loginWithOtp, resetPassword, changePassword,
     loadGroups, createGroup, joinGroup, renameGroup, leaveGroup,
     loadExpenses, addExpense, editExpense, removeExpense, getExpenses, clearMonthExpenses,
     loadBudgets, setBudget, getBudget,

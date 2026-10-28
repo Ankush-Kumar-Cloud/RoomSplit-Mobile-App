@@ -141,20 +141,20 @@ exports.deleteExpense = async (req, res) => {
   try {
     const { groupId, expenseId } = req.params;
 
-    // Check if user is group owner or creator of expense
     const group = await Group.findById(groupId).select('owner').lean();
     if (!group) return res.status(404).json({ message: 'Group not found' });
 
-    const isOwner = group.owner?.toString() === req.user._id.toString();
+    const exp = await Expense.findById(expenseId);
+    if (!exp) return res.status(404).json({ message: 'Expense not found' });
 
-    const query = { _id: expenseId, group: groupId };
-    if (!isOwner) {
-      // Non-owners can only delete their own expenses
-      query.user = req.user._id;
+    const isOwner = group.owner?.toString() === req.user._id.toString();
+    const isCreator = exp.user?.toString() === req.user._id.toString();
+
+    if (!isOwner && !isCreator) {
+      return res.status(403).json({ message: 'Not authorized to delete this expense' });
     }
 
-    const exp = await Expense.findOneAndDelete(query);
-    if (!exp) return res.status(404).json({ message: 'Expense not found or not authorized' });
+    await Expense.deleteOne({ _id: expenseId });
 
     const io = req.app.get('io');
     if (io) io.to(groupId).emit('expenseDeleted', { _id: exp._id });

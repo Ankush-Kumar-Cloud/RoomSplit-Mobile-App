@@ -14,7 +14,7 @@ const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreCl
 const PROD_BASE_URL = "https://roomsplit-mobile-app.onrender.com/api";
 const PROD_SOCKET_URL = "https://roomsplit-mobile-app.onrender.com";
 
-const LOCAL_IP = "10.98.129.52"; // Update if local machine IP changes
+const LOCAL_IP = "10.179.94.52"; // Update if local machine IP changes
 const DEV_BASE_URL = `http://${LOCAL_IP}:5000/api`;
 const DEV_SOCKET_URL = `http://${LOCAL_IP}:5000`;
 
@@ -164,6 +164,22 @@ export const authApi = {
     const data = await api.post("/auth/login", { email, password });
     await Token.save(data.token, data.refreshToken);
     return data.user;
+  },
+  forgotPassword: async (email) => {
+    return await api.post("/auth/forgot-password", { email });
+  },
+  loginWithOtp: async (email, otp) => {
+    const data = await api.post("/auth/verify-otp-login", { email, otp });
+    await Token.save(data.token, data.refreshToken);
+    return data.user;
+  },
+  resetPassword: async (email, otp, newPassword) => {
+    const data = await api.post("/auth/reset-password", { email, otp, newPassword });
+    await Token.save(data.token, data.refreshToken);
+    return data.user;
+  },
+  changePassword: async (currentPassword, newPassword) => {
+    return await api.put("/auth/change-password", { currentPassword, newPassword });
   },
   logout: async () => {
     try {

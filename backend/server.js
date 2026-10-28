@@ -58,6 +58,13 @@ const startApp = async () => {
   app.use('/api/auth/login',  authLimiter);
   app.use('/api/auth/signup', authLimiter);
 
+  const otpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { message: 'Too many OTP requests. Please wait 15 minutes and try again.' },
+  });
+  app.use('/api/auth/forgot-password', otpLimiter);
+
   // ── Routes ─────────────────────────────────────────────
   app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
   app.use('/api/auth',             authRouter);
@@ -98,4 +105,3 @@ startApp().catch((err) => {
   console.error('❌ Backend startup failed:', err.message);
   process.exit(1);
 });
-

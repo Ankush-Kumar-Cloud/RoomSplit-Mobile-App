@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,24 +19,43 @@ import { useApp } from '../context/AppContext';
 import { COLORS } from '../utils/theme';
 
 export default function AuthScreen() {
-  const { theme, setTheme, login, signup } = useApp();
+  const { theme, setTheme, login, signup, forgotPassword, loginWithOtp, resetPassword } = useApp();
 
   const c = COLORS[theme];
 
-  const [tab, setTab] = useState('login');
+  const [tab, setTab] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // ── Forgot Password & OTP States ──────────────────────────────────────────
+  const [forgotStep, setForgotStep] = useState(1); // 1 = enter email, 2 = enter otp & action
+  const [otp, setOtp] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [showResetPassForm, setShowResetPassForm] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
   const reset = () => {
     setErr('');
+    setMsg('');
   };
 
   const submit = async () => {
     setBusy(true);
     setErr('');
+    setMsg('');
 
     try {
       if (tab === 'login') {
@@ -48,7 +67,7 @@ export default function AuthScreen() {
           email.trim().toLowerCase(),
           pass
         );
-      } else {
+      } else if (tab === 'signup') {
         if (!name.trim()) {
           throw new Error('Name is required');
         }
@@ -71,6 +90,75 @@ export default function AuthScreen() {
       }
     } catch (e) {
       setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Forgot Password: Send OTP to Email ────────────────────────────────────
+  const handleSendOtp = async () => {
+    if (!email.trim()) {
+      setErr('Please enter your email address');
+      return;
+    }
+
+    setBusy(true);
+    setErr('');
+    setMsg('');
+
+    try {
+      await forgotPassword(email.trim().toLowerCase());
+      setForgotStep(2);
+      setResendTimer(45);
+      setMsg(`We sent a 6-digit OTP code to ${email.trim()}`);
+    } catch (e) {
+      setErr(e.message || 'Could not send verification code');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Forgot Password: Login directly with OTP ─────────────────────────────
+  const handleLoginWithOtp = async () => {
+    if (!otp.trim() || otp.trim().length !== 6) {
+      setErr('Please enter the 6-digit verification code');
+      return;
+    }
+
+    setBusy(true);
+    setErr('');
+
+    try {
+      await loginWithOtp(email.trim().toLowerCase(), otp.trim());
+    } catch (e) {
+      setErr(e.message || 'Invalid or expired verification code');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Forgot Password: Update Password & Login ─────────────────────────────
+  const handleResetPassword = async () => {
+    if (!otp.trim() || otp.trim().length !== 6) {
+      setErr('Please enter the 6-digit verification code');
+      return;
+    }
+    if (!newPass || newPass.length < 6) {
+      setErr('New password must be at least 6 characters');
+      return;
+    }
+    if (newPass !== confirmPass) {
+      setErr('Passwords do not match');
+      return;
+    }
+
+    setBusy(true);
+    setErr('');
+
+    try {
+      await resetPassword(email.trim().toLowerCase(), otp.trim(), newPass);
+    } catch (e) {
+      setErr(e.message || 'Failed to update password');
     } finally {
       setBusy(false);
     }
@@ -229,160 +317,457 @@ export default function AuthScreen() {
             ]}
           >
 
-            {/* Login / Signup Tabs */}
-            <View
-              style={[
-                styles.tabRow,
-                {
-                  backgroundColor: c.surface2,
-                },
-              ]}
-            >
-              {[
-                ['login', 'Login'],
-                ['signup', 'Sign Up'],
-              ].map(([t, label]) => (
-                <TouchableOpacity
-                  key={t}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setTab(t);
-                    reset();
-                  }}
+            {/* ── FORGOT PASSWORD / OTP VIEW ── */}
+            {tab === 'forgot' ? (
+              <View>
+                {/* Header with Back button */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setTab('login');
+                      reset();
+                    }}
+                    style={{ paddingRight: 12, paddingVertical: 4 }}
+                  >
+                    <Text style={{ color: c.accent, fontSize: 16, fontWeight: '700' }}>← Back</Text>
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, flex: 1, textAlign: 'center', marginRight: 36 }}>
+                    {forgotStep === 1 ? 'Forgot Password' : 'Email Verification'}
+                  </Text>
+                </View>
+
+                {/* Info message */}
+                {msg ? (
+                  <View style={[styles.msgBox, { backgroundColor: c.accentBg || '#E8F5E9', borderColor: c.accentBd || '#81C784' }]}>
+                    <Text style={{ color: c.accent, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>{msg}</Text>
+                  </View>
+                ) : null}
+
+                {/* Error message */}
+                {err ? (
+                  <View style={[styles.errBox, { backgroundColor: c.dangerBg, borderColor: c.dangerBd }]}>
+                    <Text style={[styles.errorText, { color: c.danger }]}>{err}</Text>
+                  </View>
+                ) : null}
+
+                {/* Step 1: Request OTP */}
+                {forgotStep === 1 ? (
+                  <>
+                    <Text style={{ fontSize: 13, color: c.text2, marginBottom: 14, lineHeight: 18 }}>
+                      Enter your account email. We will send a 6-digit OTP code to verify your identity and let you log in or reset your password.
+                    </Text>
+
+                    <TextInput
+                      style={inputStyle}
+                      placeholder="Your account email *"
+                      placeholderTextColor={c.text3}
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      onSubmitEditing={handleSendOtp}
+                    />
+
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={handleSendOtp}
+                      disabled={busy}
+                      style={[
+                        styles.submitBtn,
+                        {
+                          backgroundColor: c.accent,
+                          opacity: busy ? 0.7 : 1,
+                          marginTop: 6,
+                        },
+                      ]}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.submitText}>Send OTP Code ✉️</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  /* Step 2: Verify OTP & Login or Reset */
+                  <>
+                    <Text style={{ fontSize: 13, color: c.text2, marginBottom: 12 }}>
+                      Enter the 6-digit OTP sent to <Text style={{ fontWeight: '700', color: c.text }}>{email}</Text>:
+                    </Text>
+
+                    <TextInput
+                      style={[
+                        inputStyle,
+                        {
+                          textAlign: 'center',
+                          letterSpacing: 8,
+                          fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                          fontSize: 24,
+                          fontWeight: '700',
+                          marginBottom: 14,
+                        },
+                      ]}
+                      placeholder="------"
+                      placeholderTextColor={c.text3}
+                      value={otp}
+                      onChangeText={(v) => {
+                        setOtp(v.replace(/[^0-9]/g, '').slice(0, 6));
+                        setErr('');
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      returnKeyType="done"
+                    />
+
+                    {/* Mode Selector: Quick OTP Login vs Set New Password */}
+                    <View
+                      style={[
+                        styles.tabRow,
+                        {
+                          backgroundColor: c.surface2,
+                          marginBottom: 14,
+                        },
+                      ]}
+                    >
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setShowResetPassForm(false);
+                          setErr('');
+                        }}
+                        style={[
+                          styles.tabBtn,
+                          {
+                            backgroundColor: !showResetPassForm ? c.accent : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.tabText,
+                            {
+                              color: !showResetPassForm ? '#fff' : c.text2,
+                              fontSize: 12,
+                            },
+                          ]}
+                        >
+                          ⚡ Login with OTP
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setShowResetPassForm(true);
+                          setErr('');
+                        }}
+                        style={[
+                          styles.tabBtn,
+                          {
+                            backgroundColor: showResetPassForm ? c.accent : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.tabText,
+                            {
+                              color: showResetPassForm ? '#fff' : c.text2,
+                              fontSize: 12,
+                            },
+                          ]}
+                        >
+                          🔑 Set New Password
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* If Set New Password is chosen */}
+                    {showResetPassForm && (
+                      <View style={{ marginBottom: 4 }}>
+                        <TextInput
+                          style={inputStyle}
+                          placeholder="New password (min 6 chars) *"
+                          placeholderTextColor={c.text3}
+                          value={newPass}
+                          onChangeText={setNewPass}
+                          secureTextEntry
+                          autoCapitalize="none"
+                          returnKeyType="next"
+                        />
+                        <TextInput
+                          style={inputStyle}
+                          placeholder="Confirm new password *"
+                          placeholderTextColor={c.text3}
+                          value={confirmPass}
+                          onChangeText={setConfirmPass}
+                          secureTextEntry
+                          autoCapitalize="none"
+                          returnKeyType="done"
+                          onSubmitEditing={handleResetPassword}
+                        />
+                      </View>
+                    )}
+
+                    {/* Submit Button */}
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={showResetPassForm ? handleResetPassword : handleLoginWithOtp}
+                      disabled={busy}
+                      style={[
+                        styles.submitBtn,
+                        {
+                          backgroundColor: c.accent,
+                          opacity: busy ? 0.7 : 1,
+                        },
+                      ]}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.submitText}>
+                          {showResetPassForm
+                            ? 'Update Password & Login →'
+                            : 'Login with OTP →'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Footer Options: Resend OTP and Change Email */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginTop: 16,
+                      }}
+                    >
+                      <TouchableOpacity
+                        onPress={resendTimer === 0 ? handleSendOtp : undefined}
+                        disabled={resendTimer > 0 || busy}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: resendTimer > 0 ? c.text3 : c.accent,
+                            fontWeight: '600',
+                          }}
+                        >
+                          {resendTimer > 0
+                            ? `Resend OTP in ${resendTimer}s`
+                            : 'Resend Code'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => {
+                          setForgotStep(1);
+                          setErr('');
+                          setMsg('');
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, color: c.text2 }}>
+                          Change Email
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            ) : (
+              /* ── STANDARD LOGIN / SIGNUP VIEW ── */
+              <View>
+                {/* Login / Signup Tabs */}
+                <View
                   style={[
-                    styles.tabBtn,
+                    styles.tabRow,
                     {
-                      backgroundColor:
-                        tab === t
-                          ? c.accent
-                          : 'transparent',
+                      backgroundColor: c.surface2,
                     },
                   ]}
                 >
-                  <Text
+                  {[
+                    ['login', 'Login'],
+                    ['signup', 'Sign Up'],
+                  ].map(([t, label]) => (
+                    <TouchableOpacity
+                      key={t}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setTab(t);
+                        reset();
+                      }}
+                      style={[
+                        styles.tabBtn,
+                        {
+                          backgroundColor:
+                            tab === t
+                              ? c.accent
+                              : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabText,
+                          {
+                            color:
+                              tab === t
+                                ? '#fff'
+                                : c.text2,
+                          },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Full Name - Signup Only */}
+                {tab === 'signup' && (
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="Full name *"
+                    placeholderTextColor={c.text3}
+                    value={name}
+                    onChangeText={setName}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                  />
+                )}
+
+                {/* Email */}
+                <TextInput
+                  style={inputStyle}
+                  placeholder="Email *"
+                  placeholderTextColor={c.text3}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                />
+
+                {/* Password */}
+                <TextInput
+                  style={[
+                    inputStyle,
+                    {
+                      marginBottom: 0,
+                    },
+                  ]}
+                  placeholder="Password *"
+                  placeholderTextColor={c.text3}
+                  value={pass}
+                  onChangeText={setPass}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={submit}
+                />
+
+                {/* Forgot Password Link on Login tab */}
+                {tab === 'login' && (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'flex-end',
+                      marginTop: 10,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setTab('forgot');
+                        setForgotStep(1);
+                        setErr('');
+                        setMsg('');
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: c.accent,
+                          fontSize: 13,
+                          fontWeight: '600',
+                        }}
+                      >
+                        Forgot password? / Login with OTP
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Error Message */}
+                {err ? (
+                  <View
                     style={[
-                      styles.tabText,
+                      styles.errBox,
                       {
-                        color:
-                          tab === t
-                            ? '#fff'
-                            : c.text2,
+                        backgroundColor: c.dangerBg,
+                        borderColor: c.dangerBd,
                       },
                     ]}
                   >
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        styles.errorText,
+                        {
+                          color: c.danger,
+                        },
+                      ]}
+                    >
+                      {err}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.errorPlaceholder} />
+                )}
 
-            {/* Full Name - Signup Only */}
-            {tab === 'signup' && (
-              <TextInput
-                style={inputStyle}
-                placeholder="Full name *"
-                placeholderTextColor={c.text3}
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                returnKeyType="next"
-              />
-            )}
-
-            {/* Email */}
-            <TextInput
-              style={inputStyle}
-              placeholder="Email *"
-              placeholderTextColor={c.text3}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-            />
-
-            {/* Password */}
-            <TextInput
-              style={[
-                inputStyle,
-                {
-                  marginBottom: 0,
-                },
-              ]}
-              placeholder="Password *"
-              placeholderTextColor={c.text3}
-              value={pass}
-              onChangeText={setPass}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={submit}
-            />
-
-            {/* Error Message */}
-            {err ? (
-              <View
-                style={[
-                  styles.errBox,
-                  {
-                    backgroundColor: c.dangerBg,
-                    borderColor: c.dangerBd,
-                  },
-                ]}
-              >
-                <Text
+                {/* Submit Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={submit}
+                  disabled={busy}
                   style={[
-                    styles.errorText,
+                    styles.submitBtn,
                     {
-                      color: c.danger,
+                      backgroundColor: c.accent,
+                      opacity: busy ? 0.7 : 1,
                     },
                   ]}
                 >
-                  {err}
+                  {busy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitText}>
+                      {tab === 'login'
+                        ? 'Login →'
+                        : 'Create Account →'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Bottom Hint */}
+                <Text
+                  style={[
+                    styles.bottomHint,
+                    {
+                      color: c.text3,
+                    },
+                  ]}
+                >
+                  Sign up · create group · share invite code
                 </Text>
               </View>
-            ) : (
-              <View style={styles.errorPlaceholder} />
             )}
 
-            {/* Submit Button */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={submit}
-              disabled={busy}
-              style={[
-                styles.submitBtn,
-                {
-                  backgroundColor: c.accent,
-                  opacity: busy ? 0.7 : 1,
-                },
-              ]}
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitText}>
-                  {tab === 'login'
-                    ? 'Login →'
-                    : 'Create Account →'}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Bottom Hint */}
-            <Text
-              style={[
-                styles.bottomHint,
-                {
-                  color: c.text3,
-                },
-              ]}
-            >
-              Sign up · create group · share invite code
-            </Text>
           </View>
 
           {/* Footer */}
@@ -518,7 +903,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  /* ================= ERROR ================= */
+  /* ================= MESSAGES & ERROR ================= */
+
+  msgBox: {
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+  },
 
   errBox: {
     borderRadius: 8,

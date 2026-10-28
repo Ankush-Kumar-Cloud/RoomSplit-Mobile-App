@@ -1,18 +1,23 @@
 // auth.js
 const express = require('express');
 const {
-  signup, login, getMe, updateMe, refreshToken, logoutUser, registerPushToken
+  signup, login, getMe, updateMe, refreshToken, logoutUser, registerPushToken,
+  forgotPassword, verifyOtpLogin, resetPassword, changePassword
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const r = express.Router();
 
-r.post('/signup',  signup);
-r.post('/login',   login);
-r.post('/refresh', refreshToken);           // New: silent token refresh
-r.post('/logout',  protect, logoutUser);    // New: invalidates refresh token in DB
-r.get('/me',       protect, getMe);
-r.put('/me',       protect, updateMe);
-r.post('/push-token', protect, registerPushToken);
+r.post('/signup',          signup);
+r.post('/login',           login);
+r.post('/forgot-password', forgotPassword);     // Send OTP to email
+r.post('/verify-otp-login', verifyOtpLogin);    // Verify OTP & login directly
+r.post('/reset-password',  resetPassword);      // Reset password with OTP & login
+r.put('/change-password',  protect, changePassword); // Change password when logged in
+r.post('/refresh',         refreshToken);       // Silent token refresh
+r.post('/logout',          protect, logoutUser);// Invalidates refresh token in DB
+r.get('/me',               protect, getMe);
+r.put('/me',               protect, updateMe);
+r.post('/push-token',      protect, registerPushToken);
 
 module.exports.authRouter = r;
 

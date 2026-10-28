@@ -11,9 +11,6 @@ import { COLORS, PAL } from '../utils/theme';
 import { Btn, Avatar, BottomSheet, GroupCardSkeleton } from '../components/index';
 
 // ── Memoized Group Card ─────────────────────────────────────────────────────
-// memo() ensures this component only re-renders if its OWN props change.
-// Without memo, every time ANY group changes, ALL group cards re-render.
-// This is the #1 FlatList optimization technique.
 const GroupCard = memo(function GroupCard({ g, index, onPress, surfaceColor, borderColor, textColor, subTextColor }) {
   const col  = PAL[index % PAL.length];
   const mems = g.members || [];
@@ -53,23 +50,31 @@ const GroupCard = memo(function GroupCard({ g, index, onPress, surfaceColor, bor
 });
 
 export default function HomeScreen({ navigation }) {
-  const { theme, setTheme, user, groups, logout, loadGroups, createGroup, joinGroup, updateProfile } = useApp();
+  const {
+    theme, setTheme, user, groups, logout, loadGroups,
+    createGroup, joinGroup, updateProfile, changePassword,
+  } = useApp();
   const c = COLORS[theme];
 
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [showCreate,  setShowCreate]  = useState(false);
-  const [showJoin,    setShowJoin]    = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [gname,       setGname]       = useState('');
-  const [code,        setCode]        = useState('');
-  const [newName,     setNewName]     = useState('');
-  const [err,         setErr]         = useState('');
-  const [busy,        setBusy]        = useState(false);
-  const [scanned,     setScanned]     = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [permission,  requestPermission] = useCameraPermissions();
+  const [loading,         setLoading]         = useState(true);
+  const [refreshing,      setRefreshing]      = useState(false);
+  const [showCreate,      setShowCreate]      = useState(false);
+  const [showJoin,        setShowJoin]        = useState(false);
+  const [showScanner,     setShowScanner]     = useState(false);
+  const [showProfile,     setShowProfile]     = useState(false);
+  const [gname,           setGname]           = useState('');
+  const [code,            setCode]            = useState('');
+  const [newName,         setNewName]         = useState('');
+  const [err,             setErr]             = useState('');
+  const [busy,            setBusy]            = useState(false);
+  const [scanned,         setScanned]         = useState(false);
+  const [cameraActive,    setCameraActive]    = useState(false);
+  const [permission,      requestPermission]  = useCameraPermissions();
+
+  // Password change states inside profile sheet
+  const [showChangePass,  setShowChangePass]  = useState(false);
+  const [curPass,         setCurPass]         = useState('');
+  const [updatePass,      setUpdatePass]      = useState('');
 
   useEffect(() => {
     if (showScanner) {
@@ -125,7 +130,6 @@ export default function HomeScreen({ navigation }) {
     }
     setScanned(false);
     setShowJoin(false);
-    // Allow Android BottomSheet dialog to fully dismiss before presenting Scanner modal
     setTimeout(() => {
       setShowScanner(true);
     }, 250);
@@ -136,7 +140,6 @@ export default function HomeScreen({ navigation }) {
     setScanned(true);
     setCameraActive(false);
     setShowScanner(false);
-    // data is the invite code embedded in the QR
     let trimmed = data?.trim().toUpperCase();
     if (trimmed && trimmed.includes('/')) {
       const parts = trimmed.split('/');
@@ -153,9 +156,34 @@ export default function HomeScreen({ navigation }) {
   const handleUpdateProfile = useCallback(async () => {
     if (!newName.trim()) return setErr('Name cannot be empty');
     setBusy(true); setErr('');
-    try { await updateProfile(newName.trim()); setShowProfile(false); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+    try {
+      await updateProfile(newName.trim());
+      Alert.alert('Success', 'Profile name updated!');
+      setShowProfile(false);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   }, [newName, updateProfile]);
+
+  const handlePasswordChange = useCallback(async () => {
+    if (!curPass) return setErr('Enter current password');
+    if (!updatePass || updatePass.length < 6) return setErr('New password must be at least 6 characters');
+    setBusy(true); setErr('');
+    try {
+      await changePassword(curPass, updatePass);
+      Alert.alert('Success', 'Password updated successfully!');
+      setCurPass('');
+      setUpdatePass('');
+      setShowChangePass(false);
+      setShowProfile(false);
+    } catch (e) {
+      setErr(e.message || 'Failed to update password');
+    } finally {
+      setBusy(false);
+    }
+  }, [curPass, updatePass, changePassword]);
 
   const handleLogout = useCallback(() => {
     Alert.alert('Logout', 'Are you sure?', [
@@ -164,19 +192,16 @@ export default function HomeScreen({ navigation }) {
     ]);
   }, [logout]);
 
-  // Stable callback for FlatList — prevents all items from re-rendering when parent updates
   const handleGroupPress = useCallback((g) => {
     navigation.navigate('Dashboard', { groupId: g._id, groupName: g.name });
   }, [navigation]);
 
-  // Stable keyExtractor — prevents recalculation on every render
-  const keyExtractor = useCallback((g) => g._id, []);
+  const keyExtractor = useCallback((item) => item._id, []);
 
-  // Stable renderItem using the memoized GroupCard
-  const renderItem = useCallback(({ item: g, index: i }) => (
+  const renderItem = useCallback(({ item, index }) => (
     <GroupCard
-      g={g}
-      index={i}
+      g={item}
+      index={index}
       onPress={handleGroupPress}
       surfaceColor={c.surface}
       borderColor={c.border}
@@ -204,7 +229,7 @@ export default function HomeScreen({ navigation }) {
           <Switch value={theme === 'dark'} onValueChange={v => setTheme(v ? 'dark' : 'light')}
             trackColor={{ false: c.border2, true: c.accent }} thumbColor="#fff"
             style={{ transform: [{ scaleX: .85 }, { scaleY: .85 }], marginRight: 6 }} />
-          <TouchableOpacity onPress={() => { setNewName(user?.name || ''); setErr(''); setShowProfile(true); }}
+          <TouchableOpacity onPress={() => { setNewName(user?.name || ''); setErr(''); setShowChangePass(false); setShowProfile(true); }}
             style={[s.profileBtn, { backgroundColor: c.surface2, borderColor: c.border }]}>
             <View style={[s.profileAv, { backgroundColor: c.accent }]}>
               <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{user?.name?.charAt(0).toUpperCase()}</Text>
@@ -230,10 +255,10 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* ── Group list with skeleton loader ── */}
+      {/* ── Content ── */}
       {loading ? (
         <View style={{ padding: 16 }}>
-          {[1, 2, 3].map(i => <GroupCardSkeleton key={i} />)}
+          {[0, 1, 2].map(i => <GroupCardSkeleton key={i} theme={theme} />)}
         </View>
       ) : (
         <FlatList
@@ -242,11 +267,10 @@ export default function HomeScreen({ navigation }) {
           renderItem={renderItem}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />}
-          // FlatList Performance Props
-          initialNumToRender={10}        // Only render 10 items initially
-          maxToRenderPerBatch={10}       // Render 10 items per batch during scroll
-          windowSize={5}                 // Keep 5 screens of items in memory
-          removeClippedSubviews={true}   // Unmount off-screen items (Android)
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
           ListEmptyComponent={
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
               <Text style={{ fontSize: 44, marginBottom: 14 }}>🏠</Text>
@@ -274,7 +298,6 @@ export default function HomeScreen({ navigation }) {
 
       {/* ── Join Group Sheet ── */}
       <BottomSheet visible={showJoin} title="Join a Group" onClose={() => setShowJoin(false)} theme={theme}>
-        {/* QR Scan Button */}
         <TouchableOpacity
           onPress={handleScanQR}
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
@@ -288,7 +311,6 @@ export default function HomeScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        {/* Divider */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <View style={{ flex: 1, height: 1, backgroundColor: c.border }} />
           <Text style={{ fontSize: 12, color: c.text3 }}>or enter code manually</Text>
@@ -310,12 +332,46 @@ export default function HomeScreen({ navigation }) {
       </BottomSheet>
 
       {/* ── Profile Sheet ── */}
-      <BottomSheet visible={showProfile} title="My Profile" onClose={() => setShowProfile(false)} theme={theme}>
+      <BottomSheet visible={showProfile} title="My Profile" onClose={() => { setShowProfile(false); setShowChangePass(false); setErr(''); }} theme={theme}>
         <TextInput style={[inputSt, { marginBottom: 6 }]} placeholder="Display name" placeholderTextColor={c.text3}
           value={newName} onChangeText={v => { setNewName(v); setErr(''); }} autoCapitalize="words" />
         <Text style={{ fontSize: 12, color: c.text3, marginBottom: 14 }}>Email: {user?.email}</Text>
-        {err ? <Text style={{ color: c.danger, fontSize: 13, marginBottom: 10 }}>{err}</Text> : null}
-        <Btn theme={theme} onPress={handleUpdateProfile} loading={busy} full>Save Changes</Btn>
+        <Btn theme={theme} onPress={handleUpdateProfile} loading={busy} full style={{ marginBottom: 14 }}>Save Name</Btn>
+
+        {/* Change Password Collapsible Section */}
+        <View style={{ borderTopWidth: 1, borderTopColor: c.border, paddingTop: 14, marginBottom: 8 }}>
+          <TouchableOpacity
+            onPress={() => { setShowChangePass(prev => !prev); setErr(''); }}
+            style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: c.text }}>🔑 Update Password</Text>
+            <Text style={{ fontSize: 13, color: c.accent, fontWeight: '600' }}>{showChangePass ? 'Cancel' : 'Change'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showChangePass && (
+          <View style={{ marginTop: 4 }}>
+            <TextInput
+              style={[inputSt, { marginBottom: 8 }]}
+              placeholder="Current password"
+              placeholderTextColor={c.text3}
+              secureTextEntry
+              value={curPass}
+              onChangeText={v => { setCurPass(v); setErr(''); }}
+            />
+            <TextInput
+              style={[inputSt, { marginBottom: 12 }]}
+              placeholder="New password (min 6 characters)"
+              placeholderTextColor={c.text3}
+              secureTextEntry
+              value={updatePass}
+              onChangeText={v => { setUpdatePass(v); setErr(''); }}
+            />
+            <Btn theme={theme} onPress={handlePasswordChange} loading={busy} full>Update Password</Btn>
+          </View>
+        )}
+
+        {err ? <Text style={{ color: c.danger, fontSize: 13, marginTop: 10 }}>{err}</Text> : null}
       </BottomSheet>
 
       {/* ── QR Scanner Modal ── */}
@@ -329,7 +385,6 @@ export default function HomeScreen({ navigation }) {
         }}
       >
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-          {/* Camera mounted only when modal is fully ready and permission granted */}
           {cameraActive && permission?.granted ? (
             <CameraView
               style={StyleSheet.absoluteFill}
@@ -364,7 +419,6 @@ export default function HomeScreen({ navigation }) {
             {/* Dimmed sides + viewfinder cutout */}
             <View style={{ alignItems: 'center' }} pointerEvents="none">
               <View style={{ width: 240, height: 240, position: 'relative' }}>
-                {/* Corner brackets */}
                 {[
                   { top: 0, left: 0 }, { top: 0, right: 0 },
                   { bottom: 0, left: 0 }, { bottom: 0, right: 0 },

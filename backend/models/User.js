@@ -6,14 +6,17 @@ const mongoose = require('mongoose');
 // responses unless explicitly requested with .select('+refreshToken').
 
 const userSchema = new mongoose.Schema({
-  name:         { type: String, required: true, trim: true },
-  email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password:     { type: String, required: true, minlength: 6, select: false },
+  name:            { type: String, required: true, trim: true },
+  email:           { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password:        { type: String, required: true, minlength: 6, select: false },
   // Refresh token for JWT rotation — stored hashed for security
-  refreshToken: { type: String, select: false },
+  refreshToken:    { type: String, select: false },
   // Array of FCM device tokens for push notifications
   // A user can be logged in on multiple devices simultaneously
-  fcmTokens:    { type: [String], default: [], select: false },
+  fcmTokens:       { type: [String], default: [], select: false },
+  // OTP for Password Reset & OTP-based Login
+  resetOtp:        { type: String, select: false },
+  resetOtpExpires: { type: Date, select: false },
 }, { timestamps: true });
 
 // ── Pre-save hook to hash passwords ────────────────────────────────────────
