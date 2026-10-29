@@ -14,7 +14,9 @@ const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreCl
 const PROD_BASE_URL = "https://roomsplit-mobile-app.onrender.com/api";
 const PROD_SOCKET_URL = "https://roomsplit-mobile-app.onrender.com";
 
-const LOCAL_IP = "10.179.94.52"; // Update if local machine IP changes
+// Auto-detect IP from Metro hostUri if in Expo Go, fallback to current Wi-Fi IP
+const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
+const LOCAL_IP = hostUri ? hostUri.split(':')[0] : "10.110.121.52";
 const DEV_BASE_URL = `http://${LOCAL_IP}:5000/api`;
 const DEV_SOCKET_URL = `http://${LOCAL_IP}:5000`;
 

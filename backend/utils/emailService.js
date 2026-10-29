@@ -1,8 +1,8 @@
 const nodemailer = require('nodemailer');
 
-// ── Email Transporter Setup ─────────────────────────────────────────────────
-// Supports free Gmail App Passwords, custom SMTP (Brevo, SendGrid, etc.),
-// and development fallback (logs OTP to console if no email credentials configured).
+// ── High-Speed Email Transporter Setup ──────────────────────────────────────
+// Optimized with SSL (port 465), connection pooling, and high priority headers
+// to ensure instant delivery without STARTTLS negotiation delays.
 
 let transporter = null;
 
@@ -20,15 +20,22 @@ const getTransporter = () => {
         host: smtpHost,
         port: Number(smtpPort) || 587,
         secure: Number(smtpPort) === 465,
+        pool: true,
+        maxConnections: 3,
         auth: {
           user: emailUser,
           pass: emailPass,
         },
       });
     } else {
-      // Default to Gmail service
+      // Use direct SSL on port 465 with connection pooling for maximum speed with Gmail
       transporter = nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE || 'gmail',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true, // Direct SSL is significantly faster than STARTTLS on port 587
+        pool: true,   // Keep socket warm to avoid recurring handshake latencies
+        maxConnections: 3,
+        maxMessages: 100,
         auth: {
           user: emailUser,
           pass: emailPass,
@@ -41,7 +48,7 @@ const getTransporter = () => {
 };
 
 /**
- * Send 6-digit OTP email
+ * Send 6-digit OTP email with high-priority transactional headers
  * @param {string} toEmail 
  * @param {string} otp 
  * @param {string} userName 
@@ -120,16 +127,20 @@ async function sendOtpEmail(toEmail, otp, userName = 'User') {
       subject: `Your SplitMate Verification Code: ${otp}`,
       text: textContent,
       html: htmlContent,
+      priority: 'high',
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high',
+      },
     });
     console.log(`[Email] OTP sent to ${toEmail} - MessageID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('[Email Error] Failed to send email via SMTP:', error.message);
-    // Even if SMTP fails in local dev, log the code so testing isn't blocked
     console.log(`🔑 DEV FALLBACK OTP for ${toEmail}: ${otp}`);
     throw new Error(`Failed to send verification email: ${error.message}`);
   }
 }
 
 module.exports = { sendOtpEmail };
-
