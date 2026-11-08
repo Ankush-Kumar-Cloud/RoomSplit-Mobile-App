@@ -5,14 +5,32 @@ import {
 } from "react-native";
 
 import { useApp } from "../../context/AppContext";
-import { COLORS, CATS, PAL } from "../../utils/theme";
-import { today, monthKey, fmtDate, fmtTime, fmtMonth, filterExpenses } from "../../utils/domain";
-import { Avatar, CatChip, BottomSheet, ExpenseForm, ExpenseItemSkeleton } from "../../components/index";
+import { COLORS, CATS, PAL, palOf } from "../../utils/theme";
+import { today, monthKey, fmtDate, fmtTime, fmtMonth, filterExpenses, toIdStr } from "../../utils/domain";
+import { Avatar, CatChip, BottomSheet, ExpenseForm, ExpenseItemSkeleton, Btn } from "../../components/index";
 
 // ── Memoized Expense Row ─────────────────────────────────────────────────────
-const ExpenseRow = memo(function ExpenseRow({ exp, canEdit, canDelete, col, c, onEdit, onDelete }) {
+const ExpenseRow = memo(function ExpenseRow({ exp, allMembers = [], canEdit, canDelete, col, c, theme, onEdit, onDelete, onDetail }) {
+  const excluded = exp.excludedMembers || [];
+  const excludedIds = excluded.map(toIdStr);
+  const excludedCount = excludedIds.length;
+  const includedCount = Math.max(allMembers.length - excludedCount, 1);
+  const perPersonShare = (exp.amount / includedCount).toFixed(2);
+
+  // Get excluded names
+  const excludedNames = excluded.map(x => {
+    if (x?.name) return x.name;
+    const xId = toIdStr(x);
+    const found = allMembers.find(m => toIdStr(m) === xId);
+    return found?.name || 'Member';
+  });
+
   return (
-    <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: c.border }}>
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => onDetail(exp)}
+      style={{ padding: 16, borderTopWidth: 1, borderTopColor: c.border }}
+    >
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
         <View style={{ flex: 1 }}>
           <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "600", color: c.text }}>
@@ -24,13 +42,43 @@ const ExpenseRow = memo(function ExpenseRow({ exp, canEdit, canDelete, col, c, o
               {fmtDate(exp.date)} · {fmtTime(exp.createdAt)}
             </Text>
           </View>
+
+          {/* Exclusion badge if any member was excluded */}
+          {excludedCount > 0 && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8,
+              backgroundColor: theme === 'dark' ? '#2A1B1D' : '#FEF2F2',
+              borderColor: c.dangerBd, borderWidth: 1, borderRadius: 8,
+              paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start'
+            }}>
+              <Text style={{ fontSize: 11, color: c.danger, fontWeight: '700' }}>
+                🚫 Excluded: {excludedNames.join(', ')}
+              </Text>
+              <Text style={{ fontSize: 11, color: c.text3 }}>
+                (₹{perPersonShare}/share)
+              </Text>
+            </View>
+          )}
+
           {exp.note ? (
             <Text style={{ marginTop: 6, fontSize: 12, color: c.text3, fontStyle: "italic" }}>
               {exp.note}
             </Text>
           ) : null}
         </View>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: col.mid }}>₹{exp.amount}</Text>
+
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: col.mid }}>₹{exp.amount}</Text>
+          {excludedCount > 0 ? (
+            <Text style={{ fontSize: 11, color: c.text3, marginTop: 2 }}>
+              ₹{perPersonShare} × {includedCount}
+            </Text>
+          ) : (
+            <Text style={{ fontSize: 11, color: c.text3, marginTop: 2 }}>
+              ₹{(exp.amount / Math.max(allMembers.length, 1)).toFixed(1)}/ea
+            </Text>
+          )}
+        </View>
       </View>
 
       {(canEdit || canDelete) && (
@@ -47,12 +95,14 @@ const ExpenseRow = memo(function ExpenseRow({ exp, canEdit, canDelete, col, c, o
           )}
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 }, (prev, next) =>
   prev.exp._id === next.exp._id &&
   prev.exp.amount === next.exp.amount &&
   prev.exp.item === next.exp.item &&
+  prev.exp.excludedMembers?.length === next.exp.excludedMembers?.length &&
+  prev.allMembers?.length === next.allMembers?.length &&
   prev.canEdit === next.canEdit &&
   prev.canDelete === next.canDelete
 );
@@ -86,7 +136,6 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
   const c = COLORS[theme];
   const gid = group._id;
 
-  // monthOff & setMonthOff come from DashboardScreen (bar lives above tab strip)
   const mk = monthKey(monthOff);
 
   const [loading,    setLoading]    = useState(true);
@@ -95,6 +144,7 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
   const [catF,       setCatF]       = useState("");
   const [showAdd,    setShowAdd]    = useState(false);
   const [editing,    setEditing]    = useState(null);
+  const [detailExp,  setDetailExp]  = useState(null);
   const [showCats,   setShowCats]   = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
 
@@ -114,10 +164,8 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
   const todayStr = today();
   const activeMemberId = selectedMemberId || meId;
 
-  // ── Expenses for selected month
   const monthExpenses = useMemo(() => all.filter(e => e.date?.startsWith(mk)), [all, mk]);
 
-  // ── Monthly totals per member
   const monTotals = useMemo(() => {
     const t = {};
     monthExpenses.forEach(e => {
@@ -127,10 +175,6 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
     return t;
   }, [monthExpenses]);
 
-  // ── Grand total for the month
-  const monthGrandTotal = useMemo(() => Object.values(monTotals).reduce((s, v) => s + v, 0), [monTotals]);
-
-  // ── Today totals per member (only when viewing current month)
   const todayTotals = useMemo(() => {
     if (monthOff !== 0) return {};
     const t = {};
@@ -150,22 +194,29 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
     return activeUser ? [activeUser, ...others] : members;
   }, [members, activeMemberId]);
 
-  // Filter only the current month's expenses
   const filtered = useMemo(() => filterExpenses(monthExpenses, { cat: catF, search: srch }), [monthExpenses, catF, srch]);
 
   const handleDelete = useCallback((exp) => {
     Alert.alert("Delete Expense?", `"${exp.item}" will be permanently deleted.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
-        try { await removeExpense(gid, exp._id); }
-        catch (e) { Alert.alert("Error", e.message); }
+        try {
+          await removeExpense(gid, exp._id);
+          if (detailExp?._id === exp._id) setDetailExp(null);
+        } catch (e) {
+          Alert.alert("Error", e.message);
+        }
       }},
     ]);
-  }, [gid, removeExpense]);
+  }, [gid, removeExpense, detailExp]);
 
-  const handleEdit = useCallback((exp) => setEditing(exp), []);
+  const handleEdit = useCallback((exp) => {
+    setDetailExp(null);
+    setEditing(exp);
+  }, []);
+
   const handleMemberPress = useCallback((uid) => setSelectedMemberId(uid), []);
-
+  const handleDetail = useCallback((exp) => setDetailExp(exp), []);
 
   if (loading) {
     return (
@@ -182,10 +233,15 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
     );
   }
 
+  // Details sheet calculations
+  const detailExcludedIds = (detailExp?.excludedMembers || []).map(toIdStr);
+  const detailIncluded = members.filter(m => !detailExcludedIds.includes(toIdStr(m)));
+  const detailExcluded = members.filter(m => detailExcludedIds.includes(toIdStr(m)));
+  const detailSharePerPerson = detailExp && detailIncluded.length > 0 ? (detailExp.amount / detailIncluded.length).toFixed(2) : "0.00";
+  const detailPayerName = detailExp ? (detailExp.user?.name || members.find(m => toIdStr(m) === toIdStr(detailExp.user))?.name || "Member") : "";
+
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-
-
       {/* ───── MEMBER SUMMARY ───── */}
       <View style={{ backgroundColor: c.bg, paddingBottom: 6 }}>
         <ScrollView
@@ -283,7 +339,6 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
         contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />}
       >
-        {/* No expenses for this month */}
         {monthExpenses.length === 0 && (
           <View style={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 32 }}>
             <Text style={{ fontSize: 44, marginBottom: 14 }}>📭</Text>
@@ -350,12 +405,15 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
                     <ExpenseRow
                       key={exp._id}
                       exp={exp}
+                      allMembers={members}
                       col={col}
                       c={c}
+                      theme={theme}
                       canEdit={isExpMe}
                       canDelete={isExpMe || isOwner}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
+                      onDetail={handleDetail}
                     />
                   );
                 })
@@ -365,7 +423,7 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
         })}
       </ScrollView>
 
-      {/* ───── FAB (only show for current month) ───── */}
+      {/* ───── FAB ───── */}
       {monthOff === 0 && (
         <TouchableOpacity onPress={() => setShowAdd(true)} style={[s.fab, { backgroundColor: c.accent }]}>
           <Text style={{ color: "#fff", fontSize: 30, lineHeight: 34, fontWeight: "300" }}>+</Text>
@@ -396,6 +454,7 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
               note: editing.note || "", category: editing.category || "food",
               recurring: editing.recurring || false, splitType: editing.splitType || "equal",
               splitWeights: editing.splitWeights || {},
+              excludedMembers: (editing.excludedMembers || []).map(toIdStr),
             }}
             onSubmit={async (f) => {
               await editExpense(gid, editing._id, { ...f, amount: +f.amount });
@@ -403,6 +462,103 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
             }}
             onCancel={() => setEditing(null)}
           />
+        )}
+      </BottomSheet>
+
+      {/* ───── EXPENSE DETAILS MODAL ───── */}
+      <BottomSheet visible={!!detailExp} title="Expense Details" onClose={() => setDetailExp(null)} theme={theme}>
+        {detailExp && (
+          <View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: c.text, flex: 1, marginRight: 10 }}>
+                {detailExp.item}
+              </Text>
+              <Text style={{ fontSize: 24, fontWeight: '800', color: c.accent }}>
+                ₹{detailExp.amount}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <CatChip cat={detailExp.category || 'other'} />
+              <Text style={{ fontSize: 13, color: c.text2 }}>
+                Paid by <Text style={{ fontWeight: '700', color: c.text }}>{detailPayerName}</Text>
+              </Text>
+              <Text style={{ fontSize: 12, color: c.text3 }}>· {fmtDate(detailExp.date)}</Text>
+            </View>
+
+            {detailExp.note ? (
+              <View style={{ backgroundColor: c.surface2, padding: 12, borderRadius: 10, marginBottom: 16 }}>
+                <Text style={{ fontSize: 13, color: c.text2, fontStyle: 'italic' }}>"{detailExp.note}"</Text>
+              </View>
+            ) : null}
+
+            {/* Split Breakdown */}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: c.text2, letterSpacing: 0.5, marginBottom: 10 }}>
+              SPLIT BREAKDOWN ({detailIncluded.length} OF {members.length} MEMBERS)
+            </Text>
+
+            {/* Included Members List */}
+            <View style={{ backgroundColor: c.surface2, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: c.border, marginBottom: 14 }}>
+              {detailIncluded.map((m, idx) => (
+                <View
+                  key={m._id}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    padding: 12, borderBottomWidth: idx < detailIncluded.length - 1 ? 1 : 0, borderColor: c.border
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Avatar name={m.name} col={palOf(members, m._id)} size={28} />
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: c.text }}>{m.name}</Text>
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: c.accent }}>
+                    ₹{detailSharePerPerson}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Excluded Members List (if any) */}
+            {detailExcluded.length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: c.danger, letterSpacing: 0.5, marginBottom: 8 }}>
+                  EXCLUDED FROM THIS EXPENSE ({detailExcluded.length})
+                </Text>
+                <View style={{ backgroundColor: theme === 'dark' ? '#2A1B1D' : '#FEF2F2', borderRadius: 14, borderWidth: 1, borderColor: c.dangerBd, overflow: 'hidden' }}>
+                  {detailExcluded.map((m, idx) => (
+                    <View
+                      key={m._id}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                        padding: 12, borderBottomWidth: idx < detailExcluded.length - 1 ? 1 : 0, borderColor: c.dangerBd
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Avatar name={m.name} col={palOf(members, m._id)} size={28} />
+                        <View>
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: c.danger }}>{m.name}</Text>
+                          <Text style={{ fontSize: 11, color: c.danger, opacity: 0.8 }}>Not included in this expense</Text>
+                        </View>
+                      </View>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: c.text3 }}>₹0.00</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Actions */}
+            {((detailExp.user?._id || detailExp.user) === meId || isOwner) && (
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                <Btn variant="secondary" onPress={() => handleEdit(detailExp)} style={{ flex: 1 }}>
+                  Edit Expense
+                </Btn>
+                <Btn variant="danger" onPress={() => handleDelete(detailExp)} style={{ flex: 1 }}>
+                  Delete
+                </Btn>
+              </View>
+            )}
+          </View>
         )}
       </BottomSheet>
     </View>

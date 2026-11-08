@@ -249,7 +249,7 @@ export function AnalyticsTab({ group, members }) {
 // ═══════════════════════════════════════════════════════
 // MonthlyTab.js
 // ═══════════════════════════════════════════════════════
-import { calcSettlement } from '../../utils/domain';
+import { calcSettlement, toIdStr } from '../../utils/domain';
 
 export function MonthlyTab({ group, members }) {
   const { theme, getExpenses } = useApp();
@@ -258,14 +258,21 @@ export function MonthlyTab({ group, members }) {
   const mk  = monthKey(off);
   const all = getExpenses(group._id);
   const mEx = all.filter(e=>e.date?.startsWith(mk));
-  const uidOf = e => e.user?._id||e.user;
+  const uidOf = e => toIdStr(e.user);
+  const midOf = m => toIdStr(m);
 
-  const monT = useMemo(()=>{ const t={}; mEx.forEach(e=>{const u=uidOf(e);t[u]=(t[u]||0)+e.amount;}); return t; },[mEx]);
+  const monT = useMemo(()=>{
+    const t={};
+    mEx.forEach(e=>{ const u=uidOf(e); t[u]=(t[u]||0)+Number(e.amount||0); });
+    return t;
+  },[mEx]);
+
   const settle = useMemo(()=>{
     if(!members.length) return null;
-    const nm={}; members.forEach(m=>{nm[m._id]=m.name;});
-    return calcSettlement(members.map(m=>m._id), nm, monT);
-  },[members, monT]);
+    const nm={};
+    members.forEach(m=>{ nm[midOf(m)]=m.name; });
+    return calcSettlement(members.map(midOf), nm, monT, mEx);
+  },[members, monT, mEx]);
 
   return (
     <ScrollView style={{ flex:1, backgroundColor:c.bg }} contentContainerStyle={{ padding:14, paddingBottom:32 }}>
@@ -279,21 +286,28 @@ export function MonthlyTab({ group, members }) {
       </View>
 
       <View style={{ flexDirection:'row', flexWrap:'wrap', gap:10, marginBottom:16 }}>
-        {members.map((m,i)=>{ const col=PAL[i%PAL.length]; const tot=monT[m._id]||0; return (
-          <View key={m._id} style={{ width:'47%', backgroundColor:col.bg, borderColor:col.border, borderWidth:1, borderRadius:14, padding:14, alignItems:'center', gap:5 }}>
-            <Avatar name={m.name} col={col} size={30} />
-            <Text style={{ fontSize:12, fontWeight:'700', color:col.dark, textAlign:'center' }} numberOfLines={1}>{m.name}</Text>
-            <Text style={{ fontSize:24, fontWeight:'700', color:col.dark }}>₹{tot}</Text>
-            <Text style={{ fontSize:10, color:col.mid, opacity:.75 }}>spent</Text>
-          </View>
-        );})}
+        {members.map((m,i)=>{
+          const col=PAL[i%PAL.length];
+          const mid=midOf(m);
+          const tot=monT[mid]||0;
+          const share=settle?.memberShares?.[mid] != null ? Math.round(settle.memberShares[mid]) : 0;
+          return (
+            <View key={mid} style={{ width:'47%', backgroundColor:col.bg, borderColor:col.border, borderWidth:1, borderRadius:14, padding:14, alignItems:'center', gap:4 }}>
+              <Avatar name={m.name} col={col} size={30} />
+              <Text style={{ fontSize:12, fontWeight:'700', color:col.dark, textAlign:'center' }} numberOfLines={1}>{m.name}</Text>
+              <Text style={{ fontSize:22, fontWeight:'700', color:col.dark }}>₹{tot}</Text>
+              <Text style={{ fontSize:10, color:col.mid, fontWeight:'600' }}>Paid: ₹{tot}</Text>
+              <Text style={{ fontSize:10, color:c.text2 }}>Share: ₹{share}</Text>
+            </View>
+          );
+        })}
       </View>
 
       {settle && (
         <View style={{ backgroundColor:c.surface, borderColor:c.border, borderWidth:1, borderRadius:14, padding:18 }}>
           <Text style={{ fontSize:15, fontWeight:'700', color:c.text, marginBottom:16 }}>Group Summary</Text>
           <View style={{ flexDirection:'row', justifyContent:'space-around', marginBottom:16 }}>
-            {[['Total','₹'+settle.total,c.accent],['Per Person','₹'+settle.share,c.text],['Members',members.length,c.text]].map(([l,v,col])=>(
+            {[['Total','₹'+settle.total,c.accent],['Avg Share','₹'+settle.share,c.text],['Members',members.length,c.text]].map(([l,v,col])=>(
               <View key={l} style={{ alignItems:'center' }}>
                 <Text style={{ fontSize:12, color:c.text2, marginBottom:4 }}>{l}</Text>
                 <Text style={{ fontSize:22, fontWeight:'700', color:col }}>{v}</Text>
@@ -301,14 +315,26 @@ export function MonthlyTab({ group, members }) {
             ))}
           </View>
           <View style={{ height:1, backgroundColor:c.border, marginBottom:14 }} />
-          <Text style={{ fontSize:13, fontWeight:'700', color:c.text2, marginBottom:10 }}>Balance vs equal share</Text>
+          <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+            <Text style={{ fontSize:13, fontWeight:'700', color:c.text2 }}>Fair Member Balances (Net)</Text>
+            <Text style={{ fontSize:11, color:c.text3 }}>Paid vs Fair Share</Text>
+          </View>
           {settle.balances.map(b=>(
             <View key={b.id} style={{ flexDirection:'row', alignItems:'center', gap:10, paddingVertical:10, borderBottomWidth:1, borderColor:c.border }}>
               <Avatar name={b.name} col={palOf(members,b.id)} size={28} />
-              <Text style={{ flex:1, fontSize:14, color:c.text }}>{b.name}</Text>
-              <Text style={{ fontSize:13, color:c.text2, marginRight:6 }}>₹{monT[b.id]||0}</Text>
-              <View style={{ backgroundColor:b.bal>=0?c.accentBg:c.dangerBg, borderColor:b.bal>=0?c.accentBd:c.dangerBd, borderWidth:1, borderRadius:6, paddingHorizontal:10, paddingVertical:4 }}>
-                <Text style={{ fontSize:13, fontWeight:'700', color:b.bal>=0?c.accent:c.danger }}>{b.bal>=0?'+':''}₹{Math.round(b.bal)}</Text>
+              <View style={{ flex:1 }}>
+                <Text style={{ fontSize:14, fontWeight:'600', color:c.text }}>{b.name}</Text>
+                <Text style={{ fontSize:11, color:c.text2, marginTop:2 }}>
+                  Paid: ₹{b.spent} · Share: ₹{Math.round(b.share)}
+                </Text>
+              </View>
+              <View style={{ backgroundColor:b.bal>=0?c.accentBg:c.dangerBg, borderColor:b.bal>=0?c.accentBd:c.dangerBd, borderWidth:1, borderRadius:6, paddingHorizontal:10, paddingVertical:4, alignItems:'flex-end' }}>
+                <Text style={{ fontSize:13, fontWeight:'700', color:b.bal>=0?c.accent:c.danger }}>
+                  {b.bal>=0?'+':''}₹{Math.round(b.bal)}
+                </Text>
+                <Text style={{ fontSize:9, color:b.bal>=0?c.accent:c.danger, fontWeight:'500' }}>
+                  {b.bal>=0?'Gets back':'Owes'}
+                </Text>
               </View>
             </View>
           ))}
@@ -329,16 +355,23 @@ export function SettlementTab({ group, members }) {
   const gid = group._id;
   const all = getExpenses(gid);
   const mEx = all.filter(e=>e.date?.startsWith(mk));
-  const uidOf = e => e.user?._id||e.user;
+  const uidOf = e => toIdStr(e.user);
+  const midOf = m => toIdStr(m);
 
   useEffect(()=>{ loadSettlements(gid, mk); },[mk, gid]);
 
-  const monT = useMemo(()=>{ const t={}; mEx.forEach(e=>{const u=uidOf(e);t[u]=(t[u]||0)+e.amount;}); return t; },[mEx]);
+  const monT = useMemo(()=>{
+    const t={};
+    mEx.forEach(e=>{ const u=uidOf(e); t[u]=(t[u]||0)+Number(e.amount||0); });
+    return t;
+  },[mEx]);
+
   const settle = useMemo(()=>{
     if(!members.length) return null;
-    const nm={}; members.forEach(m=>{nm[m._id]=m.name;});
-    return calcSettlement(members.map(m=>m._id), nm, monT);
-  },[members, monT]);
+    const nm={};
+    members.forEach(m=>{ nm[midOf(m)]=m.name; });
+    return calcSettlement(members.map(midOf), nm, monT, mEx);
+  },[members, monT, mEx]);
 
   const handleToggle = async (i) => {
     try { await toggleSettlement(gid, mk, i); }
@@ -350,7 +383,7 @@ export function SettlementTab({ group, members }) {
       <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
         <View>
           <Text style={{ fontSize:20, fontWeight:'700', color:c.text }}>Settlement</Text>
-          <Text style={{ fontSize:12, color:c.text2, marginTop:3 }}>Minimum transactions · {fmtMon(off)}</Text>
+          <Text style={{ fontSize:12, color:c.text2, marginTop:3 }}>Smart exclusion & fair settlement · {fmtMon(off)}</Text>
         </View>
         <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
           <TouchableOpacity onPress={()=>setOff(o=>o-1)} style={{ borderWidth:1, borderColor:c.border, borderRadius:8, paddingHorizontal:10, paddingVertical:4 }}><Text style={{ color:c.text, fontSize:16 }}>‹</Text></TouchableOpacity>
@@ -363,12 +396,12 @@ export function SettlementTab({ group, members }) {
           <View style={{ alignItems:'center', paddingVertical:32 }}>
             <Text style={{ fontSize:44, marginBottom:12 }}>🎉</Text>
             <Text style={{ fontSize:17, fontWeight:'700', color:c.text, marginBottom:6 }}>All settled up!</Text>
-            <Text style={{ fontSize:13, color:c.text2, textAlign:'center' }}>Everyone spent equally this month.</Text>
+            <Text style={{ fontSize:13, color:c.text2, textAlign:'center' }}>Everyone has paid according to their fair share this month.</Text>
           </View>
         ) : settle.txns.map((txn,i)=>{
           const paid  = isPaid(gid, mk, i);
-          const fromI = members.findIndex(m=>m._id===txn.fromId);
-          const toI   = members.findIndex(m=>m._id===txn.toId);
+          const fromI = members.findIndex(m=>midOf(m)===txn.fromId);
+          const toI   = members.findIndex(m=>midOf(m)===txn.toId);
           const fc    = PAL[Math.max(fromI,0)%PAL.length];
           const tc    = PAL[Math.max(toI,0)%PAL.length];
           return (
@@ -401,19 +434,30 @@ export function SettlementTab({ group, members }) {
 
       {settle && (
         <View style={{ backgroundColor:c.surface, borderColor:c.border, borderWidth:1, borderRadius:14, padding:16 }}>
-          <Text style={{ fontSize:15, fontWeight:'700', color:c.text, marginBottom:14 }}>Breakdown</Text>
+          <Text style={{ fontSize:15, fontWeight:'700', color:c.text, marginBottom:14 }}>Fair Share Breakdown</Text>
           <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8, marginBottom:14 }}>
-            {members.map((m,i)=>{ const col=PAL[i%PAL.length]; return (
-              <View key={m._id} style={{ backgroundColor:col.bg, borderColor:col.border, borderWidth:1, borderRadius:10, padding:12, alignItems:'center', gap:4, minWidth:'30%', flex:1 }}>
-                <Avatar name={m.name} col={col} size={26} />
-                <Text style={{ fontSize:11, fontWeight:'700', color:col.dark, textAlign:'center' }} numberOfLines={1}>{m.name}</Text>
-                <Text style={{ fontSize:18, fontWeight:'700', color:col.dark }}>₹{monT[m._id]||0}</Text>
-              </View>
-            );})}
+            {members.map((m,i)=>{
+              const col=PAL[i%PAL.length];
+              const mid=midOf(m);
+              const paidAmt = monT[mid]||0;
+              const fairShare = Math.round(settle.memberShares?.[mid] || 0);
+              const diff = paidAmt - fairShare;
+              return (
+                <View key={mid} style={{ backgroundColor:col.bg, borderColor:col.border, borderWidth:1, borderRadius:10, padding:12, alignItems:'center', gap:3, minWidth:'46%', flex:1 }}>
+                  <Avatar name={m.name} col={col} size={26} />
+                  <Text style={{ fontSize:12, fontWeight:'700', color:col.dark, textAlign:'center' }} numberOfLines={1}>{m.name}</Text>
+                  <Text style={{ fontSize:12, color:col.dark, fontWeight:'600' }}>Paid: ₹{paidAmt}</Text>
+                  <Text style={{ fontSize:11, color:col.mid }}>Fair Share: ₹{fairShare}</Text>
+                  <Text style={{ fontSize:11, fontWeight:'700', color: diff>=0 ? c.accent : c.danger, marginTop:2 }}>
+                    {diff>=0 ? `+₹${diff} (Gets)` : `-₹${Math.abs(diff)} (Owes)`}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
           <View style={{ borderTopWidth:1, borderColor:c.border, paddingTop:12, flexDirection:'row', justifyContent:'space-between', flexWrap:'wrap', gap:6 }}>
-            <Text style={{ fontSize:13, color:c.text2 }}>Total · Equal share</Text>
-            <Text style={{ fontSize:13, fontWeight:'700', color:c.text }}>₹{settle.total} · ₹{settle.share}/person</Text>
+            <Text style={{ fontSize:13, color:c.text2 }}>Total Expenses</Text>
+            <Text style={{ fontSize:13, fontWeight:'700', color:c.text }}>₹{settle.total}</Text>
           </View>
         </View>
       )}

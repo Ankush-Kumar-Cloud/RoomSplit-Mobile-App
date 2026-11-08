@@ -33,11 +33,22 @@ export default function DashboardScreen({ route, navigation }) {
   const members = group?.members || [];
   
   const orderedMembers = React.useMemo(() => {
-    if (!members.length || !user?._id) return members;
+    if (!members.length) return [];
+    // Ensure each member ID appears only once to avoid duplicate React keys
+    const seen = new Set();
+    const unique = [];
+    for (const m of members) {
+      const id = String(m?._id || m?.id || m || '');
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        unique.push(m);
+      }
+    }
+    if (!user?._id) return unique;
     const meStr = String(user._id);
-    const me = members.find(m => String(m._id) === meStr);
-    const others = members.filter(m => String(m._id) !== meStr);
-    return me ? [me, ...others] : members;
+    const me = unique.find(m => String(m._id) === meStr);
+    const others = unique.filter(m => String(m._id) !== meStr);
+    return me ? [me, ...others] : unique;
   }, [members, user]);
 
   useEffect(() => {

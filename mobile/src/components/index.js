@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { COLORS, catOf, PAL, palOf } from '../utils/theme';
 import { useApp } from '../context/AppContext';
+import { toIdStr } from '../utils/domain';
 
 /* ────────────────────────────────────────────────
    HOOK: get theme colors
@@ -314,14 +315,33 @@ export function ExpenseForm({ initial, members = [], onSubmit, onCancel, theme =
   const c = COLORS[theme] || COLORS.light;
   const { CATS } = require('../utils/theme');
 
-  const [form, setForm] = useState(initial || {
-    item: '', amount: '', date: new Date().toISOString().split('T')[0],
-    note: '', category: 'food', recurring: false, splitType: 'equal', splitWeights: {},
+  const [form, setForm] = useState(() => {
+    if (initial) {
+      return {
+        ...initial,
+        excludedMembers: (initial.excludedMembers || []).map(toIdStr),
+      };
+    }
+    return {
+      item: '', amount: '', date: new Date().toISOString().split('T')[0],
+      note: '', category: 'food', recurring: false, splitType: 'equal', splitWeights: {},
+      excludedMembers: [],
+    };
   });
   const [busy, setBusy] = useState(false);
+  const [showExclude, setShowExclude] = useState(false);
 
   const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), []);
-  const isValid = form.item.trim() && form.amount && +form.amount > 0 && form.date;
+
+  const excludedList = (form.excludedMembers || []).map(toIdStr);
+  const excludedCount = excludedList.length;
+  const includedCount = Math.max(members.length - excludedCount, 0);
+  const allExcluded = members.length > 0 && includedCount === 0;
+  const excludedMemberNames = members
+    .filter(m => excludedList.includes(toIdStr(m)))
+    .map(m => m.name)
+    .join(', ');
+  const isValid = form.item.trim() && form.amount && +form.amount > 0 && form.date && !allExcluded;
 
   const handleSubmit = async () => {
     if (!isValid || busy) return;
@@ -362,6 +382,233 @@ export function ExpenseForm({ initial, members = [], onSubmit, onCancel, theme =
       <Input label="Date * (YYYY-MM-DD)" theme={theme} placeholder="2025-08-01"
         value={form.date} onChangeText={v => set('date', v)} keyboardType="numbers-and-punctuation" maxLength={10} />
 
+      {/* ── Who didn't consume this expense? (Smart Expense Exclusion) ── */}
+      {members && members.length > 1 && (
+        <View style={{ marginBottom: 14 }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: c.text2, marginBottom: 8, letterSpacing: 0.5 }}>
+            EXCLUDE MEMBERS (OPTIONAL)
+          </Text>
+
+          {!showExclude ? (
+            /* ── Compact Trigger Button (Takes minimal space, no scroll needed) ── */
+            <View>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setShowExclude(true)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 12,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  backgroundColor: excludedCount > 0 ? (theme === 'dark' ? '#2A1B1D' : '#FEF2F2') : c.surface2,
+                  borderColor: excludedCount > 0 ? c.dangerBd : c.border,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <View style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    backgroundColor: excludedCount > 0 ? c.dangerBg : c.accentBg,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Text style={{ fontSize: 16 }}>{excludedCount > 0 ? '🚫' : '👥'}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: excludedCount > 0 ? c.danger : c.text }}>
+                      {excludedCount > 0
+                        ? `${excludedCount} Member${excludedCount > 1 ? 's' : ''} Excluded`
+                        : "Who didn't consume?"}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: excludedCount > 0 ? c.danger : c.text3, marginTop: 1 }} numberOfLines={1}>
+                      {excludedCount > 0
+                        ? `${excludedMemberNames} (pays ₹0)`
+                        : 'Everyone included equally by default'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {excludedCount > 0 && (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        set('excludedMembers', []);
+                      }}
+                      style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}
+                    >
+                      <Text style={{ fontSize: 10, fontWeight: '600', color: c.text2 }}>Reset</Text>
+                    </TouchableOpacity>
+                  )}
+                  <View style={{
+                    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+                    backgroundColor: excludedCount > 0 ? c.danger : c.accent,
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                      {excludedCount > 0 ? 'Edit ✏️' : 'Choose +'}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Quick live calculation pill if members excluded and amount entered */}
+              {excludedCount > 0 && Number(form.amount) > 0 && !allExcluded && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 11, color: c.text2 }}>
+                    {includedCount} sharing ({members.length - excludedCount}/{members.length})
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: c.accent }}>
+                    ₹{(Number(form.amount) / includedCount).toFixed(2)} / person
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            /* ── Expanded Exclusion Selector ── */
+            <View style={{
+              padding: 14,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: c.accentBd,
+              backgroundColor: theme === 'dark' ? '#141E19' : '#F0FDF4',
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: c.text }}>
+                    Who didn't consume this?
+                  </Text>
+                  <Text style={{ fontSize: 11, color: c.text2, marginTop: 1 }}>
+                    Select members who should NOT pay for this:
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowExclude(false)}
+                  style={{
+                    backgroundColor: c.accent,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓ Done</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ gap: 6, marginVertical: 8 }}>
+                {members.map((m, i) => {
+                  const mid = toIdStr(m);
+                  const col = PAL[i % PAL.length];
+                  const isExcluded = excludedList.includes(mid);
+
+                  return (
+                    <TouchableOpacity
+                      key={mid}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        const next = isExcluded
+                          ? excludedList.filter(id => id !== mid)
+                          : [...excludedList, mid];
+                        set('excludedMembers', next);
+                      }}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: 10,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        backgroundColor: isExcluded ? (theme === 'dark' ? '#2A1B1D' : '#FEF2F2') : c.surface,
+                        borderColor: isExcluded ? c.dangerBd : c.border,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                        <Avatar name={m.name} col={col} size={28} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: isExcluded ? c.danger : c.text }}>
+                            {m.name}
+                          </Text>
+                          <Text style={{ fontSize: 10, color: isExcluded ? c.danger : c.text3, marginTop: 1 }}>
+                            {isExcluded ? 'Excluded (Pays ₹0)' : 'Included in share'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={{
+                        width: 20, height: 20, borderRadius: 5, borderWidth: 1.5,
+                        alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: isExcluded ? c.danger : 'transparent',
+                        borderColor: isExcluded ? c.danger : c.border2,
+                      }}>
+                        {isExcluded && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Dynamic Live Preview in Expanded Mode */}
+              {Number(form.amount) > 0 && (
+                <View style={{
+                  marginTop: 6,
+                  padding: 10,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  backgroundColor: allExcluded ? c.dangerBg : c.surface,
+                  borderColor: allExcluded ? c.dangerBd : c.border,
+                }}>
+                  {allExcluded ? (
+                    <Text style={{ color: c.danger, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>
+                      ⚠️ Cannot exclude all members. At least 1 member must consume.
+                    </Text>
+                  ) : (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View>
+                        <Text style={{ fontSize: 11, color: c.text2 }}>
+                          {includedCount} of {members.length} members sharing
+                        </Text>
+                        <Text style={{ fontSize: 10, color: excludedCount > 0 ? c.danger : c.text3, marginTop: 1 }}>
+                          {excludedCount > 0 ? `${excludedCount} excluded (₹0)` : 'No one excluded'}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 10, color: c.text3 }}>Per person</Text>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: c.accent }}>
+                          ₹{(Number(form.amount) / includedCount).toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Bottom Done & Reset actions */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, gap: 10 }}>
+                {excludedCount > 0 ? (
+                  <TouchableOpacity onPress={() => set('excludedMembers', [])} style={{ paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: c.danger }}>Reset (Include All)</Text>
+                  </TouchableOpacity>
+                ) : <View />}
+
+                <TouchableOpacity
+                  onPress={() => setShowExclude(false)}
+                  style={{
+                    backgroundColor: c.accent,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                    ✓ Done ({includedCount} Included)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Split type */}
       <View style={{ marginBottom: 14 }}>
         <Text style={{ fontSize: 11, fontWeight: '700', color: c.text2, marginBottom: 8, letterSpacing: 0.5 }}>SPLIT TYPE</Text>
@@ -381,7 +628,7 @@ export function ExpenseForm({ initial, members = [], onSubmit, onCancel, theme =
         <View style={{ marginBottom: 14 }}>
           <Text style={{ fontSize: 11, fontWeight: '700', color: c.text2, marginBottom: 8, letterSpacing: 0.5 }}>CUSTOM WEIGHTS</Text>
           {members.map((m, i) => {
-            const mid = m._id || m.id;
+            const mid = toIdStr(m);
             const col = PAL[i % PAL.length];
             return (
               <View key={mid} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderColor: c.border }}>

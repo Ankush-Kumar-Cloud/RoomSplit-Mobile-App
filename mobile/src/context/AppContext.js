@@ -66,19 +66,25 @@ export function AppProvider({ children }) {
     groups.forEach(g => socket.emit('joinGroup', g._id));
 
     const handleExpCreate = (exp) => {
+      if (!exp?._id) return;
+      const gid = (exp.group?._id || exp.group || '').toString();
+      if (!gid) return;
+      const expId = String(exp._id);
       setExpenses(prev => {
-        const gid = exp.group;
         const cur = prev[gid] || [];
-        if (cur.find(e => e._id === exp._id)) return prev; // Avoid duplicate from optimistic UI
+        if (cur.some(e => String(e._id) === expId)) return prev; // Avoid duplicate from optimistic UI
         return { ...prev, [gid]: [exp, ...cur] };
       });
     };
     
     const handleExpUpdate = (exp) => {
+      if (!exp?._id) return;
+      const gid = (exp.group?._id || exp.group || '').toString();
+      if (!gid) return;
+      const expId = String(exp._id);
       setExpenses(prev => {
-        const gid = exp.group;
         const cur = prev[gid] || [];
-        return { ...prev, [gid]: cur.map(e => e._id === exp._id ? exp : e) };
+        return { ...prev, [gid]: cur.map(e => String(e._id) === expId ? exp : e) };
       });
     };
 
@@ -208,13 +214,30 @@ export function AppProvider({ children }) {
   const loadExpenses = useCallback(async (gid, filters = {}) => {
     const res = await expensesApi.getAll(gid, filters);
     const list = Array.isArray(res) ? res : (res.data || []);
-    setExpenses(prev => ({ ...prev, [gid]: list }));
+    setExpenses(prev => {
+      const seen = new Set();
+      const unique = [];
+      for (const e of list) {
+        const id = String(e?._id || '');
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          unique.push(e);
+        }
+      }
+      return { ...prev, [gid]: unique };
+    });
     return list;
   }, []);
 
   const addExpense = useCallback(async (gid, form) => {
     const exp = await expensesApi.create(gid, form);
-    setExpenses(prev => ({ ...prev, [gid]: [exp, ...(prev[gid] || [])] }));
+    if (!exp?._id) return exp;
+    const expId = String(exp._id);
+    setExpenses(prev => {
+      const cur = prev[gid] || [];
+      if (cur.some(e => String(e._id) === expId)) return prev;
+      return { ...prev, [gid]: [exp, ...cur] };
+    });
     return exp;
   }, []);
 
@@ -302,10 +325,20 @@ export function AppProvider({ children }) {
     return cur.some(s => s.txnIndex === txnIndex && s.paid);
   }, [settlements]);
 
-  // Memoized expenses getter — avoids re-sorting on every render
-  const getExpenses = useCallback((gid) =>
-    [...(expenses[gid] || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-  [expenses]);
+  // Memoized expenses getter — avoids re-sorting and deduplicates by _id
+  const getExpenses = useCallback((gid) => {
+    const raw = expenses[gid] || [];
+    const seen = new Set();
+    const unique = [];
+    for (const e of raw) {
+      const id = String(e?._id || '');
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        unique.push(e);
+      }
+    }
+    return unique.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [expenses]);
 
   const value = {
     ready, user, theme, groups, setTheme,

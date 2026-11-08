@@ -34,17 +34,52 @@ gr.delete('/:id/leave', leaveGroup);
 module.exports.groupRouter = gr;
 
 // expenses.js (nested under /api/groups/:groupId)
-const { getExpenses, createExpense, updateExpense, deleteExpense, clearMonthExpenses } = require('../controllers/expenseController');
-const { getBudgets, upsertBudget, getSettlements, toggleSettlement } = require('../controllers/budgetSettlementController');
+const {
+  getExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  clearMonthExpenses,
+  getCategoryDefaults,
+} = require('../controllers/expenseController');
+
+const {
+  getPendingSettlement,
+  recordPayment,
+  completeSettlement,
+  getSettlementHistory,
+  getSettlementCycleDetails,
+} = require('../controllers/settlementController');
+
+const {
+  getBudgets,
+  upsertBudget,
+  getSettlements,
+  toggleSettlement,
+} = require('../controllers/budgetSettlementController');
+
 const er = express.Router({ mergeParams: true });
 er.use(protect);
-er.get('/expenses',                getExpenses);
-er.post('/expenses',               createExpense);
-er.put('/expenses/:expenseId',     updateExpense);
-er.delete('/expenses/:expenseId',  deleteExpense);
-er.delete('/expenses',             clearMonthExpenses); // DELETE /expenses?month=YYYY-MM
-er.get('/budgets',                 getBudgets);
-er.put('/budgets',                 upsertBudget);
-er.get('/settlements',             getSettlements);
-er.post('/settlements/toggle',     toggleSettlement);
+
+// ── Category Defaults & Expenses ─────────────────────────────────────────────
+er.get('/expenses/category-defaults',   getCategoryDefaults);
+er.get('/expenses',                     getExpenses);
+er.post('/expenses',                    createExpense);
+er.put('/expenses/:expenseId',          updateExpense);
+er.delete('/expenses/:expenseId',       deleteExpense);
+er.delete('/expenses',                  clearMonthExpenses); // DELETE /expenses?month=YYYY-MM
+
+// ── Smart Fair Settlements & Payments (New) ───────────────────────────────────
+er.get('/settlement/pending',           getPendingSettlement);
+er.post('/settlement/pay',              recordPayment);
+er.post('/settlement/complete',         completeSettlement);
+er.get('/settlement/history',           getSettlementHistory);
+er.get('/settlement/history/:cycleId',  getSettlementCycleDetails);
+
+// ── Legacy Budgets & Month Toggles (Preserved for Backward Compatibility) ─────
+er.get('/budgets',                      getBudgets);
+er.put('/budgets',                      upsertBudget);
+er.get('/settlements',                  getSettlements);
+er.post('/settlements/toggle',          toggleSettlement);
+
 module.exports.expenseRouter = er;
