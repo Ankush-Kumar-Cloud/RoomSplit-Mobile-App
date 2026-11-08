@@ -212,21 +212,26 @@ export function AppProvider({ children }) {
 
   // ── EXPENSE ACTIONS ───────────────────────────────────────────────────────
   const loadExpenses = useCallback(async (gid, filters = {}) => {
-    const res = await expensesApi.getAll(gid, filters);
-    const list = Array.isArray(res) ? res : (res.data || []);
-    setExpenses(prev => {
-      const seen = new Set();
-      const unique = [];
-      for (const e of list) {
-        const id = String(e?._id || '');
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          unique.push(e);
+    try {
+      const res = await expensesApi.getAll(gid, filters);
+      const list = Array.isArray(res) ? res : (res.data || []);
+      setExpenses(prev => {
+        const seen = new Set();
+        const unique = [];
+        for (const e of list) {
+          const id = String(e?._id || '');
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            unique.push(e);
+          }
         }
-      }
-      return { ...prev, [gid]: unique };
-    });
-    return list;
+        return { ...prev, [gid]: unique };
+      });
+      return list;
+    } catch (err) {
+      if (__DEV__) console.log('loadExpenses error:', err?.message);
+      return [];
+    }
   }, []);
 
   const addExpense = useCallback(async (gid, form) => {
@@ -281,9 +286,14 @@ export function AppProvider({ children }) {
 
   // ── BUDGET ACTIONS ────────────────────────────────────────────────────────
   const loadBudgets = useCallback(async (gid, month) => {
-    const list = await budgetsApi.getAll(gid, month);
-    setBudgets(prev => ({ ...prev, [gid]: list }));
-    return list;
+    try {
+      const list = await budgetsApi.getAll(gid, month);
+      setBudgets(prev => ({ ...prev, [gid]: list }));
+      return list;
+    } catch (err) {
+      if (__DEV__) console.log('loadBudgets error:', err?.message);
+      return [];
+    }
   }, []);
 
   const setBudget = useCallback(async (gid, userId, monthKey, amount) => {
@@ -304,9 +314,14 @@ export function AppProvider({ children }) {
 
   // ── SETTLEMENT ACTIONS ────────────────────────────────────────────────────
   const loadSettlements = useCallback(async (gid, month) => {
-    const list = await settlementsApi.getAll(gid, month);
-    setSettlements(prev => ({ ...prev, [`${gid}-${month}`]: list }));
-    return list;
+    try {
+      const list = await settlementsApi.getAll(gid, month);
+      setSettlements(prev => ({ ...prev, [`${gid}-${month}`]: list }));
+      return list;
+    } catch (err) {
+      if (__DEV__) console.log('loadSettlements error:', err?.message);
+      return [];
+    }
   }, []);
 
   const toggleSettlement = useCallback(async (gid, monthKey, txnIndex) => {

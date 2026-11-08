@@ -86,7 +86,16 @@ export default function HomeScreen({ navigation }) {
   }, [showScanner]);
 
   const load = useCallback(async () => {
-    try { await loadGroups(); } catch (e) { Alert.alert('Error', e.message); } finally { setLoading(false); }
+    try {
+      await loadGroups();
+    } catch (e) {
+      if (e?.message?.includes('Session expired')) {
+        return; // Redirecting to login
+      }
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoading(false);
+    }
   }, [loadGroups]);
 
   useEffect(() => { load(); }, []);

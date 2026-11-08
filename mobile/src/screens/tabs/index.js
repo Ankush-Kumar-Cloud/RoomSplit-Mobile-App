@@ -90,7 +90,11 @@ export function BudgetsTab({ group, members }) {
   const [val,    setVal]    = useState('');
   const [busy,   setBusy]   = useState(false);
 
-  useEffect(() => { loadBudgets(gid, mk); }, [gid, mk]);
+  useEffect(() => {
+    loadBudgets(gid, mk).catch(e => {
+      if (__DEV__) console.log("loadBudgets caught:", e?.message);
+    });
+  }, [gid, mk, loadBudgets]);
 
   const all = getExpenses(gid);
   const monTotals = useMemo(() => {
@@ -358,7 +362,11 @@ export function SettlementTab({ group, members }) {
   const uidOf = e => toIdStr(e.user);
   const midOf = m => toIdStr(m);
 
-  useEffect(()=>{ loadSettlements(gid, mk); },[mk, gid]);
+  useEffect(() => {
+    loadSettlements(gid, mk).catch(e => {
+      if (__DEV__) console.log("loadSettlements caught:", e?.message);
+    });
+  }, [mk, gid, loadSettlements]);
 
   const monT = useMemo(()=>{
     const t={};

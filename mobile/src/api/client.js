@@ -7,21 +7,21 @@ import { io } from "socket.io-client";
 // Physical device on same WiFi: use your machine's local IP e.g. 192.168.1.5
 import Constants, { ExecutionEnvironment } from "expo-constants";
 
-// ONLY use local IP when running inside the Expo Go app.
-// In ANY installed standalone APK, ALWAYS use the production Render backend.
-const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+// In development (__DEV__ === true in Expo Go / Metro), ALWAYS use local IP backend.
+// In standalone production APK, use the production Render backend.
+const useLocalBackend = typeof __DEV__ !== 'undefined' ? __DEV__ : true;
 
 const PROD_BASE_URL = "https://roomsplit-mobile-app.onrender.com/api";
 const PROD_SOCKET_URL = "https://roomsplit-mobile-app.onrender.com";
 
-// Auto-detect IP from Metro hostUri if in Expo Go, fallback to current Wi-Fi IP
+// Auto-detect IP from Metro hostUri if available, fallback to current Wi-Fi IP
 const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
-const LOCAL_IP = hostUri ? hostUri.split(':')[0] : "10.174.117.52";
+const LOCAL_IP = hostUri ? hostUri.split(':')[0] : "10.72.75.52";
 const DEV_BASE_URL = `http://${LOCAL_IP}:5000/api`;
 const DEV_SOCKET_URL = `http://${LOCAL_IP}:5000`;
 
-export const BASE_URL = isExpoGo ? DEV_BASE_URL : PROD_BASE_URL;
-export const SOCKET_URL = isExpoGo ? DEV_SOCKET_URL : PROD_SOCKET_URL;
+export const BASE_URL = useLocalBackend ? DEV_BASE_URL : PROD_BASE_URL;
+export const SOCKET_URL = useLocalBackend ? DEV_SOCKET_URL : PROD_SOCKET_URL;
 
 export const socket = io(SOCKET_URL, {
   autoConnect: false, // Connect manually when authenticated
@@ -112,29 +112,35 @@ const request = async (method, path, body, retried = false) => {
   const json = await res.json().catch(() => ({}));
 
   // If access token expired, attempt a silent refresh and retry ONCE
-  if (res.status === 401 && json.code === "TOKEN_EXPIRED" && !retried) {
-    if (_isRefreshing) {
-      // Another request is already refreshing — queue this one
-      return new Promise((resolve, reject) => {
-        _refreshQueue.push({ resolve, reject });
-      }).then((newToken) => {
-        return request(method, path, body, true);
-      });
-    }
+  if (res.status === 401 && !retried) {
+    if (json.code === "TOKEN_EXPIRED") {
+      if (_isRefreshing) {
+        // Another request is already refreshing — queue this one
+        return new Promise((resolve, reject) => {
+          _refreshQueue.push({ resolve, reject });
+        }).then(() => {
+          return request(method, path, body, true);
+        });
+      }
 
-    _isRefreshing = true;
-    try {
-      await attemptRefresh();
-      // Flush the queue with success
-      _refreshQueue.forEach((p) => p.resolve());
-      _refreshQueue = [];
-      _isRefreshing = false;
-      return request(method, path, body, true); // Retry the original request
-    } catch (refreshError) {
-      // Refresh also failed — session is dead, force logout
-      _refreshQueue.forEach((p) => p.reject(refreshError));
-      _refreshQueue = [];
-      _isRefreshing = false;
+      _isRefreshing = true;
+      try {
+        await attemptRefresh();
+        // Flush the queue with success
+        _refreshQueue.forEach((p) => p.resolve());
+        _refreshQueue = [];
+        _isRefreshing = false;
+        return request(method, path, body, true); // Retry the original request
+      } catch (refreshError) {
+        _refreshQueue.forEach((p) => p.reject(refreshError));
+        _refreshQueue = [];
+        _isRefreshing = false;
+        await Token.clear();
+        _onLogout?.();
+        throw new Error("Session expired. Please login again.");
+      }
+    } else {
+      // 401 with invalid token or user not found — clear token & logout
       await Token.clear();
       _onLogout?.();
       throw new Error("Session expired. Please login again.");

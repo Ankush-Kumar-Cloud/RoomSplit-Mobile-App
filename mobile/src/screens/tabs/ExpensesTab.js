@@ -149,13 +149,26 @@ export default function ExpensesTab({ group, members, monthOff, setMonthOff }) {
   const [selectedMemberId, setSelectedMemberId] = useState(null);
 
   useEffect(() => {
-    loadExpenses(gid).finally(() => setLoading(false));
-  }, [gid]);
+    let active = true;
+    loadExpenses(gid)
+      .catch((err) => {
+        if (__DEV__) console.log("loadExpenses caught in ExpensesTab:", err?.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [gid, loadExpenses]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadExpenses(gid);
-    setRefreshing(false);
+    try {
+      await loadExpenses(gid);
+    } catch (err) {
+      if (__DEV__) console.log("onRefresh caught:", err?.message);
+    } finally {
+      setRefreshing(false);
+    }
   }, [gid, loadExpenses]);
 
   const all = getExpenses(gid);
