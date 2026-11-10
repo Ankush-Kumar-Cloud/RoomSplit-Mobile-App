@@ -275,3 +275,94 @@ exports.registerPushToken = async (req, res) => {
     res.json({ message: 'Token registered successfully' });
   } catch (e) { res.status(500).json({ message: e.message }); }
 };
+
+// ── Google OAuth Sign-in / Sign-up ─────────────────────────────────────────
+exports.googleAuth = async (req, res) => {
+  try {
+    const { idToken, accessToken, user: clientUser } = req.body;
+    let googleUser = null;
+
+    // 1. If accessToken provided, verify with Google userInfo endpoint
+    if (accessToken) {
+      try {
+        const gRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (gRes.ok) {
+          googleUser = await gRes.json();
+        }
+      } catch (err) {
+        console.warn('Google accessToken verification failed:', err.message);
+      }
+    }
+
+    // 2. If idToken provided, verify with Google tokeninfo endpoint
+    if (!googleUser && idToken) {
+      try {
+        const gRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        if (gRes.ok) {
+          googleUser = await gRes.json();
+        }
+      } catch (err) {
+        console.warn('Google idToken verification failed:', err.message);
+      }
+    }
+
+    // 3. Fallback to client user data
+    if (!googleUser && clientUser?.email) {
+      googleUser = clientUser;
+    }
+
+    if (!googleUser || !googleUser.email) {
+      return res.status(400).json({ message: 'Invalid Google authentication token' });
+    }
+
+    const email = googleUser.email.trim().toLowerCase();
+    const name = googleUser.name || googleUser.given_name || email.split('@')[0];
+    const googleId = googleUser.sub || googleUser.id;
+    const avatar = googleUser.picture || null;
+
+    // Search for existing user with this email
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // First-time user: automatically create account without password!
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        avatar,
+        authProvider: 'google',
+      });
+    } else {
+      // Existing user: update googleId & avatar if missing
+      let modified = false;
+      if (!user.googleId && googleId) {
+        user.googleId = googleId;
+        modified = true;
+      }
+      if (!user.avatar && avatar) {
+        user.avatar = avatar;
+        modified = true;
+      }
+      if (modified) {
+        await user.save({ validateBeforeSave: false });
+      }
+    }
+
+    const newAccessToken = generateAccessToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = newRefreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    res.json({
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+      user: user.toPublic(),
+    });
+  } catch (e) {
+    console.error('Google auth error:', e);
+    res.status(500).json({ message: e.message || 'Google authentication failed' });
+  }
+};

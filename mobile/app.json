@@ -2,6 +2,7 @@
   "expo": {
     "name": "SplitMate",
     "slug": "roomsplit",
+    "scheme": "roomsplit",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

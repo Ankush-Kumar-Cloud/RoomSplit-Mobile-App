@@ -173,6 +173,11 @@ export const authApi = {
     await Token.save(data.token, data.refreshToken);
     return data.user;
   },
+  googleLogin: async (googleData) => {
+    const data = await api.post("/auth/google", googleData);
+    await Token.save(data.token, data.refreshToken);
+    return data.user;
+  },
   forgotPassword: async (email) => {
     return await api.post("/auth/forgot-password", { email });
   },

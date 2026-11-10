@@ -148,6 +148,12 @@ export function AppProvider({ children }) {
     return u;
   }, []);
 
+  const loginWithGoogle = useCallback(async (googleData) => {
+    const u = await authApi.googleLogin(googleData);
+    setUser(u);
+    return u;
+  }, []);
+
   const signup = useCallback(async (name, email, password) => {
     const u = await authApi.signup(name, email, password);
     setUser(u);
@@ -357,7 +363,7 @@ export function AppProvider({ children }) {
 
   const value = {
     ready, user, theme, groups, setTheme,
-    login, signup, logout, updateProfile,
+    login, signup, logout, updateProfile, loginWithGoogle,
     forgotPassword, loginWithOtp, resetPassword, changePassword,
     loadGroups, createGroup, joinGroup, renameGroup, leaveGroup,
     loadExpenses, addExpense, editExpense, removeExpense, getExpenses, clearMonthExpenses,

@@ -8,7 +8,11 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   name:            { type: String, required: true, trim: true },
   email:           { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password:        { type: String, required: true, minlength: 6, select: false },
+  password:        { type: String, required: false, minlength: 6, select: false },
+  // Google OAuth fields
+  googleId:        { type: String, sparse: true },
+  avatar:          { type: String },
+  authProvider:    { type: String, default: 'local', enum: ['local', 'google'] },
   // Refresh token for JWT rotation — stored hashed for security
   refreshToken:    { type: String, select: false },
   // Array of FCM device tokens for push notifications
@@ -22,18 +26,25 @@ const userSchema = new mongoose.Schema({
 // ── Pre-save hook to hash passwords ────────────────────────────────────────
 const bcrypt = require('bcryptjs');
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 12); // Upgraded from 10 to 12 rounds
+  if (!this.password || !this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
 // ── Instance Methods ────────────────────────────────────────────────────────
 userSchema.methods.matchPassword = function (plain) {
+  if (!this.password) return false;
   return require('bcryptjs').compare(plain, this.password);
 };
 
 userSchema.methods.toPublic = function () {
-  return { _id: this._id, name: this.name, email: this.email };
+  return {
+    _id: this._id,
+    name: this.name,
+    email: this.email,
+    avatar: this.avatar || null,
+    authProvider: this.authProvider || 'local',
+  };
 };
 
 module.exports = mongoose.model('User', userSchema);
