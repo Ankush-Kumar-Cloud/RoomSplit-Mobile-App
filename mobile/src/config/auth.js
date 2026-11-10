@@ -1,10 +1,9 @@
 // Google OAuth Configuration
-// Replace with your Google Cloud Console Client IDs
 export const GOOGLE_AUTH_CONFIG = {
   // Web Client ID (Works in Expo Go and Web)
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "",
+  webClientId: "793282243753-1c05vc81nfpe63b1qsmlsm5anv8jhmm6.apps.googleusercontent.com",
   // Android Client ID (For standalone APK)
-  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || "",
+  androidClientId: "",
   // iOS Client ID (Optional)
-  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "",
+  iosClientId: "",
 };
