@@ -16,7 +16,7 @@ const PROD_SOCKET_URL = "https://roomsplit-mobile-app.onrender.com";
 
 // Auto-detect IP from Metro hostUri if available, fallback to current Wi-Fi IP
 const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
-const LOCAL_IP = hostUri ? hostUri.split(':')[0] : "10.174.117.52";
+const LOCAL_IP = hostUri ? hostUri.split(':')[0] : "10.72.75.52";
 const DEV_BASE_URL = `http://${LOCAL_IP}:5000/api`;
 const DEV_SOCKET_URL = `http://${LOCAL_IP}:5000`;
 

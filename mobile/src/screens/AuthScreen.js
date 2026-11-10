@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Switch,
   Modal,
+  Pressable,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,10 +19,10 @@ import { StatusBar } from 'expo-status-bar';
 import Svg, { Path } from 'react-native-svg';
 
 import { useApp } from '../context/AppContext';
-import { COLORS } from '../utils/theme';
+import { COLORS, PAL } from '../utils/theme';
 import { GOOGLE_AUTH_CONFIG } from '../config/auth';
 
-// ── Google Official 4-Color Icon ─────────────────────────────────────────────
+// ── Google Official 4-Color SVG Icon ─────────────────────────────────────────
 function GoogleIcon({ size = 22 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">
@@ -45,7 +46,7 @@ export default function AuthScreen() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showEmailAuth, setShowEmailAuth] = useState(false);
 
-  // Email/pass fallback
+  // Email/pass fallback states
   const [emailTab, setEmailTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,7 +58,6 @@ export default function AuthScreen() {
       const url = event.url || event;
       if (!url) return;
 
-      // Extract access_token or id_token from redirect hash/query
       if (url.includes('access_token=') || url.includes('id_token=')) {
         const hash = url.split('#')[1] || url.split('?')[1] || '';
         const params = new URLSearchParams(hash);
@@ -100,7 +100,7 @@ export default function AuthScreen() {
     });
   };
 
-  // ── Browser Google Sign-In (Official OAuth 2.0 Web Flow) ───────────────────
+  // ── External Browser Google OAuth 2.0 ─────────────────────────────────────
   const handleBrowserOAuth = async () => {
     const clientId = GOOGLE_AUTH_CONFIG.webClientId;
     if (!clientId) {
@@ -142,27 +142,25 @@ export default function AuthScreen() {
   };
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: theme === 'dark' ? '#0F172A' : '#F8FAFC' }]}>
+    <SafeAreaView style={[s.safe, { backgroundColor: c.bg }]}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
 
       {/* ── Top Bar ── */}
-      <View style={s.topBar}>
-        <View style={s.logoRow}>
-          <View style={s.logoBadge}>
-            <Text style={s.logoText}>₹</Text>
+      <View style={[s.topBar, { borderBottomColor: c.border }]}>
+        <View style={s.brandRow}>
+          <View style={[s.miniBadge, { backgroundColor: c.accent }]}>
+            <Text style={s.miniBadgeText}>₹</Text>
           </View>
-          <Text style={[s.brandTitle, { color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }]}>
-            RoomSplit
-          </Text>
+          <Text style={[s.brandTitle, { color: c.text }]}>SplitMate</Text>
         </View>
 
-        <View style={s.themeToggle}>
-          <Text style={{ fontSize: 13 }}>{theme === 'dark' ? '🌙' : '☀️'}</Text>
+        <View style={s.themeRow}>
+          <Text style={{ fontSize: 14 }}>{theme === 'dark' ? '🌙' : '☀️'}</Text>
           <Switch
             value={theme === 'dark'}
             onValueChange={(v) => setTheme(v ? 'dark' : 'light')}
-            trackColor={{ false: '#CBD5E1', true: '#1AAD7D' }}
-            thumbColor="#fff"
+            trackColor={{ false: c.border2, true: c.accent }}
+            thumbColor="#FFFFFF"
             style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
           />
         </View>
@@ -177,292 +175,327 @@ export default function AuthScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── Feature Highlights (As shown in screenshot 1) ── */}
-          <View style={s.featuresContainer}>
-            <Text style={[s.heroSubtitle, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>
-              Fair splitting, better living.
+          {/* ── Hero Brand Header ── */}
+          <View style={s.heroSection}>
+            <View style={[s.heroIconBox, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
+              <View style={[s.heroIconInner, { backgroundColor: c.accent }]}>
+                <Text style={s.heroCurrency}>₹</Text>
+              </View>
+            </View>
+
+            <Text style={[s.heroTitle, { color: c.text }]}>SplitMate</Text>
+            <Text style={[s.heroSubtitle, { color: c.text2 }]}>
+              Smart Expense Sharing for Roommates
             </Text>
 
-            <View style={s.bulletsList}>
-              <View style={s.bulletItem}>
-                <Text style={s.checkIcon}>✓</Text>
-                <Text style={[s.bulletText, { color: theme === 'dark' ? '#CBD5E1' : '#334155' }]}>
-                  Split bills instantly
-                </Text>
+            {/* Feature Pills */}
+            <View style={s.featuresPillRow}>
+              <View style={[s.featurePill, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                <Text style={[s.featurePillText, { color: c.text2 }]}>⚡ Fair Splitting</Text>
               </View>
-              <View style={s.bulletItem}>
-                <Text style={s.checkIcon}>✓</Text>
-                <Text style={[s.bulletText, { color: theme === 'dark' ? '#CBD5E1' : '#334155' }]}>
-                  Track group balances
-                </Text>
+              <View style={[s.featurePill, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                <Text style={[s.featurePillText, { color: c.text2 }]}>🚫 Smart Exclusion</Text>
               </View>
-              <View style={s.bulletItem}>
-                <Text style={s.checkIcon}>✓</Text>
-                <Text style={[s.bulletText, { color: theme === 'dark' ? '#CBD5E1' : '#334155' }]}>
-                  Record payments easily
-                </Text>
+              <View style={[s.featurePill, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                <Text style={[s.featurePillText, { color: c.text2 }]}>💳 Easy Settlements</Text>
               </View>
             </View>
           </View>
 
-          {/* ── Main Google Sign-In Card ── */}
+          {/* ── Main Authentication Card ── */}
           <View
             style={[
               s.card,
               {
-                backgroundColor: theme === 'dark' ? '#1E293B' : '#FFFFFF',
-                borderColor: theme === 'dark' ? '#334155' : '#E2E8F0',
+                backgroundColor: c.surface,
+                borderColor: c.border,
+                shadowColor: c.shadow,
               },
             ]}
           >
-            <Text style={[s.cardTitle, { color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }]}>
-              Welcome Back!
+            <Text style={[s.cardHeading, { color: c.text }]}>
+              Welcome!
             </Text>
-            <Text style={[s.cardSubtitle, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>
-              Please sign in to continue.
+            <Text style={[s.cardSubheading, { color: c.text2 }]}>
+              Sign in with your Google account to manage roommate bills and track balances seamlessly.
             </Text>
 
+            {/* Error Message */}
             {err ? (
-              <View style={s.errBox}>
-                <Text style={s.errText}>{err}</Text>
+              <View style={[s.errBox, { backgroundColor: c.dangerBg, borderColor: c.dangerBd }]}>
+                <Text style={[s.errText, { color: c.danger }]}>{err}</Text>
               </View>
             ) : null}
 
-            {/* ── "Continue with Google" Button (Screenshot 1) ── */}
+            {/* ── "Continue with Google" Button (SplitMate Styling) ── */}
             <TouchableOpacity
-              activeOpacity={0.85}
+              activeOpacity={0.82}
               disabled={busy}
               onPress={() => setShowChooser(true)}
               style={[
                 s.googleButton,
                 {
-                  backgroundColor: theme === 'dark' ? '#334155' : '#F1F5F9',
-                  borderColor: theme === 'dark' ? '#475569' : '#CBD5E1',
+                  backgroundColor: theme === 'dark' ? c.surface2 : '#FFFFFF',
+                  borderColor: c.border2,
                 },
               ]}
             >
               {busy ? (
-                <ActivityIndicator color={theme === 'dark' ? '#fff' : '#0F172A'} />
+                <ActivityIndicator color={c.accent} size="small" />
               ) : (
                 <View style={s.googleBtnContent}>
-                  <GoogleIcon size={24} />
-                  <Text style={[s.googleBtnText, { color: theme === 'dark' ? '#FFFFFF' : '#0F172A' }]}>
+                  <GoogleIcon size={22} />
+                  <Text style={[s.googleBtnText, { color: c.text }]}>
                     Continue with Google
                   </Text>
                 </View>
               )}
             </TouchableOpacity>
 
-            <Text style={[s.termsText, { color: theme === 'dark' ? '#64748B' : '#94A3B8' }]}>
-              By continuing, you agree to our Terms and Privacy Policy.
-            </Text>
+            <View style={s.badgeRow}>
+              <View style={[s.securityDot, { backgroundColor: c.accent }]} />
+              <Text style={[s.securityText, { color: c.text3 }]}>
+                1-Click Instant Sign-in · No passwords to remember
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View style={s.dividerRow}>
+              <View style={[s.dividerLine, { backgroundColor: c.border }]} />
+              <Text style={[s.dividerText, { color: c.text3 }]}>OR</Text>
+              <View style={[s.dividerLine, { backgroundColor: c.border }]} />
+            </View>
 
             {/* Collapsible Email Login Option */}
             <TouchableOpacity
               onPress={() => setShowEmailAuth(!showEmailAuth)}
-              style={s.emailToggleBtn}
+              style={[s.emailToggleBtn, { backgroundColor: c.surface2, borderColor: c.border }]}
+              activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 12, color: '#1AAD7D', fontWeight: '600' }}>
-                {showEmailAuth ? '▲ Hide email & password' : '▼ Or sign in with email & password'}
+              <Text style={[s.emailToggleText, { color: c.text2 }]}>
+                {showEmailAuth ? '▲ Hide Email & Password' : '✉️ Sign in with Email & Password'}
               </Text>
             </TouchableOpacity>
 
             {showEmailAuth && (
-              <View style={s.emailBox}>
-                <View style={s.tabSwitch}>
+              <View style={[s.emailFormBox, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                <View style={[s.tabSwitch, { backgroundColor: c.surface3 }]}>
                   <TouchableOpacity
                     onPress={() => setEmailTab('login')}
-                    style={[s.tabItem, emailTab === 'login' && s.tabItemActive]}
+                    style={[s.tabItem, emailTab === 'login' && { backgroundColor: c.accent }]}
                   >
-                    <Text style={[s.tabText, emailTab === 'login' && s.tabTextActive]}>Login</Text>
+                    <Text style={[s.tabText, { color: emailTab === 'login' ? '#FFFFFF' : c.text2 }]}>
+                      Login
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setEmailTab('signup')}
-                    style={[s.tabItem, emailTab === 'signup' && s.tabItemActive]}
+                    style={[s.tabItem, emailTab === 'signup' && { backgroundColor: c.accent }]}
                   >
-                    <Text style={[s.tabText, emailTab === 'signup' && s.tabTextActive]}>Sign Up</Text>
+                    <Text style={[s.tabText, { color: emailTab === 'signup' ? '#FFFFFF' : c.text2 }]}>
+                      Sign Up
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
                 {emailTab === 'signup' && (
-                  <TextInput
-                    style={[s.input, { backgroundColor: theme === 'dark' ? '#0F172A' : '#F8FAFC', color: theme === 'dark' ? '#fff' : '#000', borderColor: theme === 'dark' ? '#334155' : '#E2E8F0' }]}
-                    placeholder="Full Name"
-                    placeholderTextColor="#94A3B8"
-                    value={name}
-                    onChangeText={setName}
-                  />
+                  <View style={{ marginBottom: 10 }}>
+                    <Text style={[s.inputLabel, { color: c.text2 }]}>NAME</Text>
+                    <TextInput
+                      style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
+                      placeholder="Your full name"
+                      placeholderTextColor={c.text3}
+                      value={name}
+                      onChangeText={setName}
+                    />
+                  </View>
                 )}
 
-                <TextInput
-                  style={[s.input, { backgroundColor: theme === 'dark' ? '#0F172A' : '#F8FAFC', color: theme === 'dark' ? '#fff' : '#000', borderColor: theme === 'dark' ? '#334155' : '#E2E8F0' }]}
-                  placeholder="Email Address"
-                  placeholderTextColor="#94A3B8"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={[s.inputLabel, { color: c.text2 }]}>EMAIL</Text>
+                  <TextInput
+                    style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
+                    placeholder="name@gmail.com"
+                    placeholderTextColor={c.text3}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
 
-                <TextInput
-                  style={[s.input, { backgroundColor: theme === 'dark' ? '#0F172A' : '#F8FAFC', color: theme === 'dark' ? '#fff' : '#000', borderColor: theme === 'dark' ? '#334155' : '#E2E8F0' }]}
-                  placeholder="Password"
-                  placeholderTextColor="#94A3B8"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={[s.inputLabel, { color: c.text2 }]}>PASSWORD</Text>
+                  <TextInput
+                    style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
+                    placeholder="••••••••"
+                    placeholderTextColor={c.text3}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                  />
+                </View>
 
                 <TouchableOpacity
                   onPress={handleEmailSubmit}
                   disabled={busy}
-                  style={s.emailSubmitBtn}
+                  style={[s.submitBtn, { backgroundColor: c.accent }]}
                 >
-                  <Text style={s.emailSubmitText}>
+                  <Text style={s.submitBtnText}>
                     {busy ? 'Please wait...' : emailTab === 'login' ? 'Sign In' : 'Create Account'}
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
+
+          {/* Footer Note */}
+          <Text style={[s.footerTerms, { color: c.text3 }]}>
+            SplitMate automatically syncs roommate expenses in real time.
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── Native "Choose an account" Bottom Sheet (Screenshot 2) ── */}
-      <Modal visible={showChooser} transparent animationType="slide">
+      {/* ── SplitMate Styled "Choose an Account" BottomSheet ── */}
+      <Modal visible={showChooser} transparent animationType="slide" onRequestClose={() => setShowChooser(false)}>
         <View style={s.modalOverlay}>
-          <TouchableOpacity
-            style={s.backdrop}
-            activeOpacity={1}
-            onPress={() => setShowChooser(false)}
-          />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowChooser(false)} />
 
-          <View style={[s.sheetContainer, { backgroundColor: theme === 'dark' ? '#1E293B' : '#FFFFFF' }]}>
-            {/* Sheet Header with Google Icon and Close X */}
-            <View style={s.sheetHeader}>
-              <GoogleIcon size={32} />
+          <View style={[s.sheetCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+            {/* Drag Handle */}
+            <View style={s.sheetHandleBox}>
+              <View style={[s.sheetHandle, { backgroundColor: c.border2 }]} />
+            </View>
+
+            {/* Header */}
+            <View style={[s.sheetHeaderRow, { borderBottomColor: c.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <GoogleIcon size={24} />
+                <View>
+                  <Text style={[s.sheetTitleText, { color: c.text }]}>Choose an Account</Text>
+                  <Text style={[s.sheetSubtitleText, { color: c.text2 }]}>to continue to SplitMate</Text>
+                </View>
+              </View>
+
               <TouchableOpacity
                 onPress={() => setShowChooser(false)}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={[s.closeBtn, { backgroundColor: c.surface2 }]}
               >
-                <Text style={[s.closeX, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>✕</Text>
+                <Text style={{ fontSize: 16, color: c.text2, fontWeight: '700' }}>×</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={[s.sheetTitle, { color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }]}>
-              Choose an account
-            </Text>
-            <Text style={[s.sheetSubtitle, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>
-              to continue to <Text style={{ fontWeight: '700', color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }}>RoomSplit</Text>
-            </Text>
-
-            {/* Account List (Identical to screenshot 2) */}
-            <View style={s.accountsCard}>
-              {/* Account 1 */}
-              <TouchableOpacity
-                style={[s.accountRow, { borderBottomColor: theme === 'dark' ? '#334155' : '#E2E8F0' }]}
-                onPress={() => handleSelectAccount('ankushkumary77@gmail.com', 'ankush kumar')}
-                disabled={busy}
-              >
-                <View style={[s.accountAvatar, { backgroundColor: '#10B981' }]}>
-                  <Text style={s.avatarLetter}>A</Text>
-                </View>
-                <View style={s.accountInfo}>
-                  <Text style={[s.accountName, { color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }]}>
-                    ankush kumar
-                  </Text>
-                  <Text style={[s.accountEmail, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>
-                    ankushkumary77@gmail.com
-                  </Text>
-                  <Text style={s.accountSubtext}>Sign in with Google</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Account 2 */}
-              <TouchableOpacity
-                style={[s.accountRow, { borderBottomColor: theme === 'dark' ? '#334155' : '#E2E8F0' }]}
-                onPress={() => handleSelectAccount('ankushyadav808087@gmail.com', 'Ankush Kumar Yadav')}
-                disabled={busy}
-              >
-                <View style={[s.accountAvatar, { backgroundColor: '#F59E0B' }]}>
-                  <Text style={s.avatarLetter}>Y</Text>
-                </View>
-                <View style={s.accountInfo}>
-                  <Text style={[s.accountName, { color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }]}>
-                    Ankush Kumar Yadav
-                  </Text>
-                  <Text style={[s.accountEmail, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>
-                    ankushyadav808087@gmail.com
-                  </Text>
-                  <Text style={s.accountSubtext}>Sign in with Google</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Account 3 */}
-              <TouchableOpacity
-                style={s.accountRow}
-                onPress={() => handleSelectAccount('kanhaiya@roomsplit.app', 'Kanhaiya Kumar')}
-                disabled={busy}
-              >
-                <View style={[s.accountAvatar, { backgroundColor: '#3B82F6' }]}>
-                  <Text style={s.avatarLetter}>K</Text>
-                </View>
-                <View style={s.accountInfo}>
-                  <Text style={[s.accountName, { color: theme === 'dark' ? '#F8FAFC' : '#0F172A' }]}>
-                    Kanhaiya Kumar
-                  </Text>
-                  <Text style={[s.accountEmail, { color: theme === 'dark' ? '#94A3B8' : '#64748B' }]}>
-                    kanhaiya@roomsplit.app
-                  </Text>
-                  <Text style={s.accountSubtext}>Sign in with Google</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {/* Custom Google Account Input */}
-            {showCustomInput ? (
-              <View style={{ marginTop: 12 }}>
-                <TextInput
-                  style={[s.input, { backgroundColor: theme === 'dark' ? '#0F172A' : '#F8FAFC', color: theme === 'dark' ? '#fff' : '#000', borderColor: '#1AAD7D' }]}
-                  placeholder="Enter your Gmail address"
-                  placeholderTextColor="#94A3B8"
-                  value={customEmail}
-                  onChangeText={setCustomEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
+            {/* Accounts List (Styled like SplitMate's Group Cards) */}
+            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+              <View style={{ gap: 10, paddingVertical: 14 }}>
+                {/* Account 1 */}
                 <TouchableOpacity
-                  onPress={() => {
-                    if (customEmail.trim()) {
-                      handleSelectAccount(customEmail.trim(), customEmail.split('@')[0]);
-                    }
-                  }}
+                  activeOpacity={0.75}
+                  onPress={() => handleSelectAccount('ankushkumary77@gmail.com', 'Ankush Kumar')}
                   disabled={busy}
-                  style={[s.emailSubmitBtn, { backgroundColor: '#1AAD7D' }]}
+                  style={[s.accountCard, { backgroundColor: c.surface2, borderColor: c.border }]}
                 >
-                  <Text style={s.emailSubmitText}>Sign In with this Account →</Text>
+                  <View style={[s.accountAvatar, { backgroundColor: PAL[0].av }]}>
+                    <Text style={s.avatarLetter}>A</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.accountName, { color: c.text }]}>ankush kumar</Text>
+                    <Text style={[s.accountEmail, { color: c.text2 }]}>ankushkumary77@gmail.com</Text>
+                    <View style={[s.pillBadge, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
+                      <Text style={[s.pillBadgeText, { color: c.accent }]}>Google Account</Text>
+                    </View>
+                  </View>
+                  <Text style={[s.chevronText, { color: c.accent }]}>›</Text>
+                </TouchableOpacity>
+
+                {/* Account 2 */}
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => handleSelectAccount('ankushyadav808087@gmail.com', 'Ankush Kumar Yadav')}
+                  disabled={busy}
+                  style={[s.accountCard, { backgroundColor: c.surface2, borderColor: c.border }]}
+                >
+                  <View style={[s.accountAvatar, { backgroundColor: PAL[1].av }]}>
+                    <Text style={s.avatarLetter}>Y</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.accountName, { color: c.text }]}>Ankush Kumar Yadav</Text>
+                    <Text style={[s.accountEmail, { color: c.text2 }]}>ankushyadav808087@gmail.com</Text>
+                    <View style={[s.pillBadge, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
+                      <Text style={[s.pillBadgeText, { color: c.accent }]}>Google Account</Text>
+                    </View>
+                  </View>
+                  <Text style={[s.chevronText, { color: c.accent }]}>›</Text>
+                </TouchableOpacity>
+
+                {/* Account 3 */}
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => handleSelectAccount('kanhaiya@roomsplit.app', 'Kanhaiya Kumar')}
+                  disabled={busy}
+                  style={[s.accountCard, { backgroundColor: c.surface2, borderColor: c.border }]}
+                >
+                  <View style={[s.accountAvatar, { backgroundColor: PAL[2].av }]}>
+                    <Text style={s.avatarLetter}>K</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.accountName, { color: c.text }]}>Kanhaiya Kumar</Text>
+                    <Text style={[s.accountEmail, { color: c.text2 }]}>kanhaiya@roomsplit.app</Text>
+                    <View style={[s.pillBadge, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
+                      <Text style={[s.pillBadgeText, { color: c.accent }]}>Google Account</Text>
+                    </View>
+                  </View>
+                  <Text style={[s.chevronText, { color: c.accent }]}>›</Text>
                 </TouchableOpacity>
               </View>
-            ) : (
+
+              {/* Enter custom Google Email option */}
+              {showCustomInput ? (
+                <View style={[s.customInputBox, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                  <Text style={[s.inputLabel, { color: c.text2 }]}>ENTER ANY GMAIL ADDRESS</Text>
+                  <TextInput
+                    style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
+                    placeholder="yourname@gmail.com"
+                    placeholderTextColor={c.text3}
+                    value={customEmail}
+                    onChangeText={setCustomEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (customEmail.trim()) {
+                        handleSelectAccount(customEmail.trim(), customEmail.split('@')[0]);
+                      }
+                    }}
+                    disabled={busy}
+                    style={[s.submitBtn, { backgroundColor: c.accent }]}
+                  >
+                    <Text style={s.submitBtnText}>Sign In with this Email →</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowCustomInput(true)}
+                  style={[s.anotherAccountBtn, { borderColor: c.border }]}
+                >
+                  <Text style={[s.anotherAccountText, { color: c.accent }]}>
+                    + Use another Google account
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Browser OAuth Link */}
               <TouchableOpacity
-                onPress={() => setShowCustomInput(true)}
-                style={s.useAnotherBtn}
+                onPress={handleBrowserOAuth}
+                style={s.browserLinkBtn}
               >
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#1AAD7D' }}>
-                  + Use another Google account
+                <Text style={[s.browserLinkText, { color: c.text3 }]}>
+                  Open official Google web sign-in ↗
                 </Text>
               </TouchableOpacity>
-            )}
-
-            {/* Browser Google Sign-In Option */}
-            <TouchableOpacity
-              onPress={handleBrowserOAuth}
-              style={{ marginTop: 14, alignItems: 'center', paddingVertical: 6 }}
-            >
-              <Text style={{ fontSize: 11, color: theme === 'dark' ? '#64748B' : '#94A3B8' }}>
-                Open in external Google web browser ↗
-              </Text>
-            </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -471,107 +504,146 @@ export default function AuthScreen() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: {
+    flex: 1,
+  },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
-  logoRow: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  logoBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#1AAD7D',
+  miniBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoText: {
-    fontSize: 20,
-    color: '#fff',
+  miniBadgeText: {
+    fontSize: 16,
+    color: '#FFFFFF',
     fontWeight: '800',
   },
   brandTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
-  themeToggle: {
+  themeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    justifyContent: 'center',
-    minHeight: '85%',
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+    alignItems: 'center',
   },
-  featuresContainer: {
+  heroSection: {
     alignItems: 'center',
     marginBottom: 24,
   },
-  heroSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 16,
-    letterSpacing: 0.2,
-  },
-  bulletsList: {
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  bulletItem: {
-    flexDirection: 'row',
+  heroIconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 26,
+    borderWidth: 1.5,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  checkIcon: {
-    color: '#3B82F6',
-    fontSize: 15,
+  heroIconInner: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroCurrency: {
+    fontSize: 32,
+    color: '#FFFFFF',
     fontWeight: '800',
   },
-  bulletText: {
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  heroSubtitle: {
     fontSize: 14,
-    fontWeight: '500',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  featuresPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 14,
+  },
+  featurePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  featurePillText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   card: {
-    borderRadius: 24,
+    width: '100%',
+    borderRadius: 22,
     borderWidth: 1,
-    padding: 24,
+    padding: 22,
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  cardTitle: {
-    fontSize: 24,
+  cardHeading: {
+    fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 6,
+    letterSpacing: -0.2,
   },
-  cardSubtitle: {
-    fontSize: 14,
+  cardSubheading: {
+    fontSize: 13,
     textAlign: 'center',
+    lineHeight: 19,
+    marginTop: 6,
     marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  errBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  errText: {
+    fontSize: 12,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   googleButton: {
     width: '100%',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
   },
   googleBtnContent: {
     flexDirection: 'row',
@@ -583,27 +655,59 @@ const s = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  termsText: {
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  securityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  securityText: {
     fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 16,
-    marginBottom: 10,
+    fontWeight: '500',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+    marginVertical: 18,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   emailToggleBtn: {
-    marginTop: 14,
-    paddingVertical: 6,
-  },
-  emailBox: {
     width: '100%',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  emailToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emailFormBox: {
+    width: '100%',
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   tabSwitch: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 3,
     marginBottom: 12,
   },
@@ -611,144 +715,161 @@ const s = StyleSheet.create({
     flex: 1,
     paddingVertical: 6,
     alignItems: 'center',
-    borderRadius: 8,
-  },
-  tabItemActive: {
-    backgroundColor: '#1AAD7D',
+    borderRadius: 6,
   },
   tabText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
+    fontWeight: '700',
   },
-  tabTextActive: {
-    color: '#fff',
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 5,
+    letterSpacing: 0.5,
   },
   input: {
     width: '100%',
-    height: 44,
-    borderRadius: 12,
+    height: 42,
+    borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     fontSize: 14,
-    marginBottom: 10,
   },
-  emailSubmitBtn: {
-    backgroundColor: '#1AAD7D',
+  submitBtn: {
+    width: '100%',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
     marginTop: 4,
   },
-  emailSubmitText: {
-    color: '#fff',
+  submitBtnText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },
-  errBox: {
-    width: '100%',
-    backgroundColor: '#FEF2F2',
-    borderColor: '#F87171',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-  },
-  errText: {
-    color: '#DC2626',
-    fontSize: 12,
+  footerTerms: {
+    fontSize: 11,
     textAlign: 'center',
+    marginTop: 20,
+    lineHeight: 16,
   },
 
-  // ── Sheet Styles (Screenshot 2) ──
+  // ── BottomSheet Styles (Matching SplitMate Theme) ──
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  backdrop: {
-    flex: 1,
+  sheetCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
   },
-  sheetContainer: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 36,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
+  sheetHandleBox: {
+    alignItems: 'center',
+    paddingBottom: 10,
   },
-  sheetHeader: {
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 99,
+  },
+  sheetHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
   },
-  closeX: {
-    fontSize: 22,
-    fontWeight: '600',
-    padding: 4,
-  },
-  sheetTitle: {
-    fontSize: 22,
+  sheetTitleText: {
+    fontSize: 17,
     fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.2,
   },
-  sheetSubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 20,
+  sheetSubtitleText: {
+    fontSize: 12,
+    marginTop: 1,
   },
-  accountsCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#334155',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  accountRow: {
+  accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    gap: 14,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
   },
   accountAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarLetter: {
-    color: '#fff',
-    fontSize: 18,
+    color: '#FFFFFF',
+    fontSize: 17,
     fontWeight: '800',
   },
-  accountInfo: {
-    flex: 1,
-  },
   accountName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   accountEmail: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    marginTop: 1,
   },
-  accountSubtext: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 2,
+  pillBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 0.8,
+    marginTop: 4,
   },
-  useAnotherBtn: {
-    marginTop: 14,
+  pillBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  chevronText: {
+    fontSize: 22,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+  },
+  customInputBox: {
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  anotherAccountBtn: {
+    paddingVertical: 10,
     alignItems: 'center',
-    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 6,
+  },
+  anotherAccountText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  browserLinkBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  browserLinkText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
 });
