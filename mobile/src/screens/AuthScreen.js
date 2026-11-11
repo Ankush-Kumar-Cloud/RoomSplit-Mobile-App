@@ -10,16 +10,15 @@ import {
   ActivityIndicator,
   StyleSheet,
   Switch,
-  Modal,
-  Pressable,
   Linking,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Svg, { Path } from 'react-native-svg';
 
 import { useApp } from '../context/AppContext';
-import { COLORS, PAL } from '../utils/theme';
+import { COLORS } from '../utils/theme';
 import { GOOGLE_AUTH_CONFIG } from '../config/auth';
 
 // ── Google Official 4-Color SVG Icon ─────────────────────────────────────────
@@ -41,31 +40,68 @@ export default function AuthScreen() {
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [showChooser, setShowChooser] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [showEmailAuth, setShowEmailAuth] = useState(false);
+  const [lastAccount, setLastAccount] = useState(null);
 
-  // Email/pass fallback states
-  const [emailTab, setEmailTab] = useState('login');
+  // Instant passwordless login inputs
+  const [showInstantEmail, setShowInstantEmail] = useState(false);
+  const [instantEmail, setInstantEmail] = useState('');
+  const [instantName, setInstantName] = useState('');
+
+  // Email/password tab states
+  const [showEmailAuth, setShowEmailAuth] = useState(false);
+  const [emailTab, setEmailTab] = useState('login'); // 'login' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
 
-  // ── Handle OAuth Deep Link Redirects ──────────────────────────────────────
+  // ── Load Last Account Logged in on THIS Specific Phone ─────────────────────
+  useEffect(() => {
+    AsyncStorage.getItem('@splitmate_last_account').then((raw) => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.email) {
+            setLastAccount(parsed);
+          }
+        } catch (_) {}
+      }
+    });
+  }, []);
+
+  const saveLastAccount = async (userObj) => {
+    try {
+      if (userObj?.email) {
+        const acc = {
+          email: userObj.email,
+          name: userObj.name || userObj.email.split('@')[0],
+        };
+        await AsyncStorage.setItem('@splitmate_last_account', JSON.stringify(acc));
+        setLastAccount(acc);
+      }
+    } catch (_) {}
+  };
+
+  // ── Handle OAuth Deep Link Redirects (roomsplit://auth?access_token=...) ───
   useEffect(() => {
     const handleUrl = (event) => {
-      const url = event.url || event;
+      const url = typeof event === 'string' ? event : event?.url;
       if (!url) return;
 
       if (url.includes('access_token=') || url.includes('id_token=')) {
-        const hash = url.split('#')[1] || url.split('?')[1] || '';
-        const params = new URLSearchParams(hash);
+        const raw = url.includes('#') ? url.split('#')[1] : url.split('?')[1] || '';
+        const params = new URLSearchParams(raw);
         const accessToken = params.get('access_token');
         const idToken = params.get('id_token');
 
         if (accessToken || idToken) {
           handleGoogleSuccess({ accessToken, idToken });
+        }
+      } else if (url.includes('error=')) {
+        const raw = url.includes('?') ? url.split('?')[1] : url.split('#')[1] || '';
+        const params = new URLSearchParams(raw);
+        const error = params.get('error');
+        if (error) {
+          setErr('Google authentication was cancelled or returned an error.');
         }
       }
     };
@@ -79,8 +115,10 @@ export default function AuthScreen() {
     setBusy(true);
     setErr('');
     try {
-      await loginWithGoogle(googleData);
-      setShowChooser(false);
+      const loggedUser = await loginWithGoogle(googleData);
+      if (loggedUser) {
+        saveLastAccount(loggedUser);
+      }
     } catch (e) {
       setErr(e.message || 'Failed to authenticate with Google');
     } finally {
@@ -88,31 +126,24 @@ export default function AuthScreen() {
     }
   };
 
-  // ── 1-Tap Google Account Selection ─────────────────────────────────────────
-  const handleSelectAccount = (accountEmail, accountName) => {
-    handleGoogleSuccess({
-      user: {
-        email: accountEmail.trim().toLowerCase(),
-        name: accountName,
-        picture: null,
-        sub: 'google_' + accountEmail.trim().toLowerCase(),
-      },
-    });
-  };
+  // ── Real Google OAuth: Opens Official Google Sign-In in Device Browser ─────
+  const handleGoogleSignIn = async () => {
+    setErr('');
+    setBusy(true);
 
-  // ── External Browser Google OAuth 2.0 ─────────────────────────────────────
-  const handleBrowserOAuth = async () => {
     const clientId = GOOGLE_AUTH_CONFIG.webClientId;
     if (!clientId) {
+      setBusy(false);
       setErr('Google Web Client ID is not configured.');
       return;
     }
 
-    const redirectUri = encodeURIComponent('https://auth.expo.io/@anonymous/roomsplit');
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=token&scope=profile%20email&prompt=select_account`;
+    // Google OAuth 2.0 Web Authorization URL
+    // Opens in Chrome on Android: Google displays that user's actual phone accounts!
+    const callbackUri = encodeURIComponent('https://roomsplit-mobile-app.onrender.com/api/auth/google/callback');
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${callbackUri}&response_type=token&scope=profile%20email&prompt=select_account`;
 
     try {
-      setBusy(true);
       await Linking.openURL(authUrl);
     } catch (e) {
       setErr('Could not open browser for Google authentication.');
@@ -121,18 +152,58 @@ export default function AuthScreen() {
     }
   };
 
-  // ── Email/Password Fallback ───────────────────────────────────────────────
+  // ── 1-Tap Instant Sign-In with any Email (Passwordless) ────────────────────
+  const handleInstantSignIn = async (userEmail, userName) => {
+    const targetEmail = (userEmail || instantEmail).trim().toLowerCase();
+    const targetName = (userName || instantName || targetEmail.split('@')[0]).trim();
+
+    if (!targetEmail) {
+      setErr('Please enter your email address');
+      return;
+    }
+
+    if (!targetEmail.includes('@') || !targetEmail.includes('.')) {
+      setErr('Please enter a valid email address');
+      return;
+    }
+
+    setBusy(true);
+    setErr('');
+    try {
+      const loggedUser = await loginWithGoogle({
+        user: {
+          email: targetEmail,
+          name: targetName,
+          picture: null,
+          sub: 'google_instant_' + targetEmail,
+        },
+      });
+      if (loggedUser) {
+        saveLastAccount(loggedUser);
+      }
+    } catch (e) {
+      setErr(e.message || 'Failed to sign in');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Email/Password Authentication ──────────────────────────────────────────
   const handleEmailSubmit = async () => {
     if (!email.trim()) return setErr('Email is required');
     if (!password) return setErr('Password is required');
     setBusy(true);
     setErr('');
     try {
+      let loggedUser;
       if (emailTab === 'signup') {
         if (!name.trim()) throw new Error('Name is required');
-        await signup(name.trim(), email.trim().toLowerCase(), password);
+        loggedUser = await signup(name.trim(), email.trim().toLowerCase(), password);
       } else {
-        await login(email.trim().toLowerCase(), password);
+        loggedUser = await login(email.trim().toLowerCase(), password);
+      }
+      if (loggedUser) {
+        saveLastAccount(loggedUser);
       }
     } catch (e) {
       setErr(e.message);
@@ -227,11 +298,37 @@ export default function AuthScreen() {
               </View>
             ) : null}
 
-            {/* ── "Continue with Google" Button (SplitMate Styling) ── */}
+            {/* ── Recent Account on THIS Specific Device (Only shows if logged in here previously) ── */}
+            {lastAccount && (
+              <View style={[s.recentAccountCard, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                <Text style={[s.recentAccountHeader, { color: c.text3 }]}>RECENT ACCOUNT ON THIS PHONE</Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  disabled={busy}
+                  onPress={() => handleInstantSignIn(lastAccount.email, lastAccount.name)}
+                  style={s.recentAccountRow}
+                >
+                  <View style={[s.accountAvatar, { backgroundColor: c.accent }]}>
+                    <Text style={s.avatarLetter}>
+                      {(lastAccount.name || lastAccount.email).charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.accountName, { color: c.text }]}>{lastAccount.name}</Text>
+                    <Text style={[s.accountEmail, { color: c.text2 }]}>{lastAccount.email}</Text>
+                  </View>
+                  <View style={[s.recentSignBtn, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
+                    <Text style={[s.recentSignText, { color: c.accent }]}>Sign In ›</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ── "Continue with Google" Button (Primary) ── */}
             <TouchableOpacity
-              activeOpacity={0.82}
+              activeOpacity={0.85}
               disabled={busy}
-              onPress={() => setShowChooser(true)}
+              onPress={handleGoogleSignIn}
               style={[
                 s.googleButton,
                 {
@@ -255,7 +352,7 @@ export default function AuthScreen() {
             <View style={s.badgeRow}>
               <View style={[s.securityDot, { backgroundColor: c.accent }]} />
               <Text style={[s.securityText, { color: c.text3 }]}>
-                1-Click Instant Sign-in · No passwords to remember
+                Opens Google's official account selector on your phone
               </Text>
             </View>
 
@@ -266,13 +363,72 @@ export default function AuthScreen() {
               <View style={[s.dividerLine, { backgroundColor: c.border }]} />
             </View>
 
-            {/* Collapsible Email Login Option */}
+            {/* ── 1-Click Instant Sign-In with Any Email (Passwordless) ── */}
             <TouchableOpacity
-              onPress={() => setShowEmailAuth(!showEmailAuth)}
-              style={[s.emailToggleBtn, { backgroundColor: c.surface2, borderColor: c.border }]}
+              onPress={() => {
+                setShowInstantEmail(!showInstantEmail);
+                if (showEmailAuth) setShowEmailAuth(false);
+              }}
+              style={[s.optionToggleBtn, { backgroundColor: c.surface2, borderColor: c.border }]}
               activeOpacity={0.7}
             >
-              <Text style={[s.emailToggleText, { color: c.text2 }]}>
+              <Text style={[s.optionToggleText, { color: c.text2 }]}>
+                {showInstantEmail ? '▲ Hide Instant Sign-in' : '⚡ 1-Click Instant Sign-in (Enter your email)'}
+              </Text>
+            </TouchableOpacity>
+
+            {showInstantEmail && (
+              <View style={[s.instantFormBox, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                <Text style={[s.formHintText, { color: c.text2 }]}>
+                  Type your Gmail or any email to sign in instantly without remembering a password:
+                </Text>
+
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={[s.inputLabel, { color: c.text2 }]}>YOUR FULL NAME (OPTIONAL)</Text>
+                  <TextInput
+                    style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
+                    placeholder="e.g. Rahul Kumar"
+                    placeholderTextColor={c.text3}
+                    value={instantName}
+                    onChangeText={setInstantName}
+                  />
+                </View>
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[s.inputLabel, { color: c.text2 }]}>YOUR GMAIL / EMAIL ADDRESS</Text>
+                  <TextInput
+                    style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
+                    placeholder="e.g. rahul@gmail.com"
+                    placeholderTextColor={c.text3}
+                    value={instantEmail}
+                    onChangeText={setInstantEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => handleInstantSignIn(instantEmail, instantName)}
+                  disabled={busy}
+                  style={[s.submitBtn, { backgroundColor: c.accent }]}
+                >
+                  <Text style={s.submitBtnText}>
+                    {busy ? 'Please wait...' : 'Sign In with This Email →'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ── Standard Email & Password Authentication ── */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowEmailAuth(!showEmailAuth);
+                if (showInstantEmail) setShowInstantEmail(false);
+              }}
+              style={[s.optionToggleBtn, { backgroundColor: c.surface2, borderColor: c.border, marginTop: 10 }]}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.optionToggleText, { color: c.text2 }]}>
                 {showEmailAuth ? '▲ Hide Email & Password' : '✉️ Sign in with Email & Password'}
               </Text>
             </TouchableOpacity>
@@ -355,150 +511,6 @@ export default function AuthScreen() {
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* ── SplitMate Styled "Choose an Account" BottomSheet ── */}
-      <Modal visible={showChooser} transparent animationType="slide" onRequestClose={() => setShowChooser(false)}>
-        <View style={s.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowChooser(false)} />
-
-          <View style={[s.sheetCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-            {/* Drag Handle */}
-            <View style={s.sheetHandleBox}>
-              <View style={[s.sheetHandle, { backgroundColor: c.border2 }]} />
-            </View>
-
-            {/* Header */}
-            <View style={[s.sheetHeaderRow, { borderBottomColor: c.border }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <GoogleIcon size={24} />
-                <View>
-                  <Text style={[s.sheetTitleText, { color: c.text }]}>Choose an Account</Text>
-                  <Text style={[s.sheetSubtitleText, { color: c.text2 }]}>to continue to SplitMate</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setShowChooser(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={[s.closeBtn, { backgroundColor: c.surface2 }]}
-              >
-                <Text style={{ fontSize: 16, color: c.text2, fontWeight: '700' }}>×</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Accounts List (Styled like SplitMate's Group Cards) */}
-            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
-              <View style={{ gap: 10, paddingVertical: 14 }}>
-                {/* Account 1 */}
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={() => handleSelectAccount('ankushkumary77@gmail.com', 'Ankush Kumar')}
-                  disabled={busy}
-                  style={[s.accountCard, { backgroundColor: c.surface2, borderColor: c.border }]}
-                >
-                  <View style={[s.accountAvatar, { backgroundColor: PAL[0].av }]}>
-                    <Text style={s.avatarLetter}>A</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.accountName, { color: c.text }]}>ankush kumar</Text>
-                    <Text style={[s.accountEmail, { color: c.text2 }]}>ankushkumary77@gmail.com</Text>
-                    <View style={[s.pillBadge, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
-                      <Text style={[s.pillBadgeText, { color: c.accent }]}>Google Account</Text>
-                    </View>
-                  </View>
-                  <Text style={[s.chevronText, { color: c.accent }]}>›</Text>
-                </TouchableOpacity>
-
-                {/* Account 2 */}
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={() => handleSelectAccount('ankushyadav808087@gmail.com', 'Ankush Kumar Yadav')}
-                  disabled={busy}
-                  style={[s.accountCard, { backgroundColor: c.surface2, borderColor: c.border }]}
-                >
-                  <View style={[s.accountAvatar, { backgroundColor: PAL[1].av }]}>
-                    <Text style={s.avatarLetter}>Y</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.accountName, { color: c.text }]}>Ankush Kumar Yadav</Text>
-                    <Text style={[s.accountEmail, { color: c.text2 }]}>ankushyadav808087@gmail.com</Text>
-                    <View style={[s.pillBadge, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
-                      <Text style={[s.pillBadgeText, { color: c.accent }]}>Google Account</Text>
-                    </View>
-                  </View>
-                  <Text style={[s.chevronText, { color: c.accent }]}>›</Text>
-                </TouchableOpacity>
-
-                {/* Account 3 */}
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={() => handleSelectAccount('kanhaiya@roomsplit.app', 'Kanhaiya Kumar')}
-                  disabled={busy}
-                  style={[s.accountCard, { backgroundColor: c.surface2, borderColor: c.border }]}
-                >
-                  <View style={[s.accountAvatar, { backgroundColor: PAL[2].av }]}>
-                    <Text style={s.avatarLetter}>K</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.accountName, { color: c.text }]}>Kanhaiya Kumar</Text>
-                    <Text style={[s.accountEmail, { color: c.text2 }]}>kanhaiya@roomsplit.app</Text>
-                    <View style={[s.pillBadge, { backgroundColor: c.accentBg, borderColor: c.accentBd }]}>
-                      <Text style={[s.pillBadgeText, { color: c.accent }]}>Google Account</Text>
-                    </View>
-                  </View>
-                  <Text style={[s.chevronText, { color: c.accent }]}>›</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Enter custom Google Email option */}
-              {showCustomInput ? (
-                <View style={[s.customInputBox, { backgroundColor: c.surface2, borderColor: c.border }]}>
-                  <Text style={[s.inputLabel, { color: c.text2 }]}>ENTER ANY GMAIL ADDRESS</Text>
-                  <TextInput
-                    style={[s.input, { backgroundColor: c.surface, color: c.text, borderColor: c.border }]}
-                    placeholder="yourname@gmail.com"
-                    placeholderTextColor={c.text3}
-                    value={customEmail}
-                    onChangeText={setCustomEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (customEmail.trim()) {
-                        handleSelectAccount(customEmail.trim(), customEmail.split('@')[0]);
-                      }
-                    }}
-                    disabled={busy}
-                    style={[s.submitBtn, { backgroundColor: c.accent }]}
-                  >
-                    <Text style={s.submitBtnText}>Sign In with this Email →</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setShowCustomInput(true)}
-                  style={[s.anotherAccountBtn, { borderColor: c.border }]}
-                >
-                  <Text style={[s.anotherAccountText, { color: c.accent }]}>
-                    + Use another Google account
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Browser OAuth Link */}
-              <TouchableOpacity
-                onPress={handleBrowserOAuth}
-                style={s.browserLinkBtn}
-              >
-                <Text style={[s.browserLinkText, { color: c.text3 }]}>
-                  Open official Google web sign-in ↗
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -636,6 +648,54 @@ const s = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
+  recentAccountCard: {
+    width: '100%',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  recentAccountHeader: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  recentAccountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  accountAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarLetter: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  accountName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  accountEmail: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  recentSignBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  recentSignText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   googleButton: {
     width: '100%',
     paddingVertical: 14,
@@ -675,7 +735,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     width: '100%',
-    marginVertical: 18,
+    marginVertical: 16,
   },
   dividerLine: {
     flex: 1,
@@ -686,7 +746,7 @@ const s = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  emailToggleBtn: {
+  optionToggleBtn: {
     width: '100%',
     paddingVertical: 11,
     paddingHorizontal: 14,
@@ -694,13 +754,25 @@ const s = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  emailToggleText: {
+  optionToggleText: {
     fontSize: 13,
     fontWeight: '600',
   },
+  instantFormBox: {
+    width: '100%',
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  formHintText: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 12,
+  },
   emailFormBox: {
     width: '100%',
-    marginTop: 14,
+    marginTop: 10,
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
@@ -752,124 +824,5 @@ const s = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     lineHeight: 16,
-  },
-
-  // ── BottomSheet Styles (Matching SplitMate Theme) ──
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheetCard: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 32,
-  },
-  sheetHandleBox: {
-    alignItems: 'center',
-    paddingBottom: 10,
-  },
-  sheetHandle: {
-    width: 38,
-    height: 4,
-    borderRadius: 99,
-  },
-  sheetHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-  },
-  sheetTitleText: {
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  sheetSubtitleText: {
-    fontSize: 12,
-    marginTop: 1,
-  },
-  closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accountCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
-  },
-  accountAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  accountName: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  accountEmail: {
-    fontSize: 12,
-    marginTop: 1,
-  },
-  pillBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 0.8,
-    marginTop: 4,
-  },
-  pillBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  chevronText: {
-    fontSize: 22,
-    fontWeight: '700',
-    paddingHorizontal: 4,
-  },
-  customInputBox: {
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 6,
-  },
-  anotherAccountBtn: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    marginTop: 6,
-  },
-  anotherAccountText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  browserLinkBtn: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginTop: 4,
-  },
-  browserLinkText: {
-    fontSize: 11,
-    fontWeight: '500',
   },
 });

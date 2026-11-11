@@ -2,7 +2,7 @@
 const express = require('express');
 const {
   signup, login, getMe, updateMe, refreshToken, logoutUser, registerPushToken,
-  forgotPassword, verifyOtpLogin, resetPassword, changePassword, googleAuth
+  forgotPassword, verifyOtpLogin, resetPassword, changePassword, googleAuth, googleCallback
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const r = express.Router();
@@ -10,6 +10,7 @@ const r = express.Router();
 r.post('/signup',          signup);
 r.post('/login',           login);
 r.post('/google',          googleAuth);         // Google 1-tap OAuth sign-in & sign-up
+r.get('/google/callback',  googleCallback);     // Browser OAuth redirect endpoint
 r.post('/forgot-password', forgotPassword);     // Send OTP to email
 r.post('/verify-otp-login', verifyOtpLogin);    // Verify OTP & login directly
 r.post('/reset-password',  resetPassword);      // Reset password with OTP & login

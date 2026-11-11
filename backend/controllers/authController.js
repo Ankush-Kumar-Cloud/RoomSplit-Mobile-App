@@ -366,3 +366,142 @@ exports.googleAuth = async (req, res) => {
     res.status(500).json({ message: e.message || 'Google authentication failed' });
   }
 };
+
+// ── Google OAuth Browser Deep Link Callback ────────────────────────────────
+exports.googleCallback = (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signing in to SplitMate...</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0B1120;
+      color: #F8FAFC;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .card {
+      background: #1E293B;
+      border: 1px solid #334155;
+      border-radius: 24px;
+      padding: 36px 28px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+    .logo {
+      width: 56px;
+      height: 56px;
+      background: #1AAD7D;
+      border-radius: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 20px rgba(26, 173, 125, 0.4);
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top: 3px solid #1AAD7D;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 18px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    h2 { font-size: 20px; font-weight: 800; margin-bottom: 8px; color: #FFFFFF; }
+    p { font-size: 14px; color: #94A3B8; line-height: 20px; margin-bottom: 20px; }
+    .btn {
+      display: none;
+      width: 100%;
+      background: #1AAD7D;
+      color: #FFFFFF;
+      text-decoration: none;
+      padding: 14px 20px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    .btn:active { opacity: 0.85; }
+    .err-text { color: #EF4444; font-size: 13px; margin-top: 10px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">₹</div>
+    <h2>Connecting to SplitMate</h2>
+    <div class="spinner" id="spinner"></div>
+    <p id="status">Verifying Google account and returning to app...</p>
+    <a id="openBtn" class="btn" href="roomsplit://auth">Open SplitMate App</a>
+    <div id="errMsg" class="err-text"></div>
+  </div>
+
+  <script>
+    (function() {
+      var hash = window.location.hash.substring(1);
+      var query = window.location.search.substring(1);
+      var raw = hash || query;
+      var params = new URLSearchParams(raw);
+
+      var accessToken = params.get('access_token');
+      var idToken = params.get('id_token');
+      var error = params.get('error');
+
+      var openBtn = document.getElementById('openBtn');
+      var status = document.getElementById('status');
+      var spinner = document.getElementById('spinner');
+      var errMsg = document.getElementById('errMsg');
+
+      if (error) {
+        spinner.style.display = 'none';
+        status.textContent = 'Google sign-in was not completed.';
+        errMsg.style.display = 'block';
+        errMsg.textContent = 'Error: ' + error;
+        openBtn.style.display = 'block';
+        openBtn.textContent = 'Back to App';
+        openBtn.href = 'roomsplit://auth?error=' + encodeURIComponent(error);
+        return;
+      }
+
+      if (accessToken || idToken) {
+        var appDeepLink = 'roomsplit://auth?' + raw;
+        openBtn.href = appDeepLink;
+
+        // Try direct redirect
+        window.location.href = appDeepLink;
+
+        // After a brief delay, show manual button if the browser didn't automatically switch
+        setTimeout(function() {
+          openBtn.style.display = 'block';
+          status.textContent = 'Tap the button below to return to SplitMate:';
+        }, 800);
+      } else {
+        spinner.style.display = 'none';
+        status.textContent = 'No authentication token received from Google.';
+        openBtn.style.display = 'block';
+        openBtn.textContent = 'Return to SplitMate';
+      }
+    })();
+  </script>
+</body>
+</html>`);
+};
