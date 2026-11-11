@@ -369,6 +369,7 @@ exports.googleAuth = async (req, res) => {
 
 // ── Google OAuth Browser Deep Link Callback ────────────────────────────────
 exports.googleCallback = (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline'; script-src * 'unsafe-inline'; style-src * 'unsafe-inline';");
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="en">
