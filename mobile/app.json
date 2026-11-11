@@ -3,10 +3,13 @@
     "name": "SplitMate",
     "slug": "roomsplit",
     "scheme": "roomsplit",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "platforms": ["android", "ios"],
+    "platforms": [
+      "android",
+      "ios"
+    ],
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.ankush.splitmate",
@@ -44,7 +47,13 @@
           "imageWidth": 200
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.793282243753-1c05vc81nfpe63b1qsmlsm5anv8jhmm6"
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"

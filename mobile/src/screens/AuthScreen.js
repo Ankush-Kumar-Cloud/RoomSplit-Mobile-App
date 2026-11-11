@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Switch,
-  Linking,
+  TurboModuleRegistry,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,18 @@ import Svg, { Path } from 'react-native-svg';
 import { useApp } from '../context/AppContext';
 import { COLORS } from '../utils/theme';
 import { GOOGLE_AUTH_CONFIG } from '../config/auth';
+
+// Safely load native Google Sign-In only when compiled into the APK
+const getGoogleSigninPkg = () => {
+  try {
+    if (!TurboModuleRegistry.get('RNGoogleSignin')) {
+      return null;
+    }
+    return require('@react-native-google-signin/google-signin');
+  } catch (_) {
+    return null;
+  }
+};
 
 // ── Google Official 4-Color SVG Icon ─────────────────────────────────────────
 function GoogleIcon({ size = 22 }) {
@@ -81,34 +93,19 @@ export default function AuthScreen() {
     } catch (_) {}
   };
 
-  // ── Handle OAuth Deep Link Redirects (roomsplit://auth?access_token=...) ───
+  // ── Configure Native Google Sign-In on Mount ──────────────────────────────
   useEffect(() => {
-    const handleUrl = (event) => {
-      const url = typeof event === 'string' ? event : event?.url;
-      if (!url) return;
-
-      if (url.includes('access_token=') || url.includes('id_token=')) {
-        const raw = url.includes('#') ? url.split('#')[1] : url.split('?')[1] || '';
-        const params = new URLSearchParams(raw);
-        const accessToken = params.get('access_token');
-        const idToken = params.get('id_token');
-
-        if (accessToken || idToken) {
-          handleGoogleSuccess({ accessToken, idToken });
-        }
-      } else if (url.includes('error=')) {
-        const raw = url.includes('?') ? url.split('?')[1] : url.split('#')[1] || '';
-        const params = new URLSearchParams(raw);
-        const error = params.get('error');
-        if (error) {
-          setErr('Google authentication was cancelled or returned an error.');
-        }
+    const pkg = getGoogleSigninPkg();
+    if (pkg?.GoogleSignin && GOOGLE_AUTH_CONFIG.webClientId) {
+      try {
+        pkg.GoogleSignin.configure({
+          webClientId: GOOGLE_AUTH_CONFIG.webClientId,
+          offlineAccess: false,
+        });
+      } catch (e) {
+        console.warn('GoogleSignin configure error:', e?.message || e);
       }
-    };
-
-    const sub = Linking.addEventListener('url', handleUrl);
-    Linking.getInitialURL().then((url) => { if (url) handleUrl(url); });
-    return () => sub?.remove?.();
+    }
   }, []);
 
   const handleGoogleSuccess = async (googleData) => {
@@ -126,27 +123,94 @@ export default function AuthScreen() {
     }
   };
 
-  // ── Real Google OAuth: Opens Official Google Sign-In in Device Browser ─────
+  // ── Native Google Sign-In: Opens Android's Real Google Account Picker ─────
   const handleGoogleSignIn = async () => {
     setErr('');
-    setBusy(true);
+    const pkg = getGoogleSigninPkg();
 
-    const clientId = GOOGLE_AUTH_CONFIG.webClientId;
-    if (!clientId) {
-      setBusy(false);
+    if (!pkg?.GoogleSignin) {
+      setErr('Native Google Sign-In needs the updated APK build. Use Instant Sign-in or Email below.');
+      return;
+    }
+
+    if (!GOOGLE_AUTH_CONFIG.webClientId) {
       setErr('Google Web Client ID is not configured.');
       return;
     }
 
-    // Google OAuth 2.0 Web Authorization URL
-    // Opens in Chrome on Android: Google displays that user's actual phone accounts!
-    const callbackUri = encodeURIComponent('https://roomsplit-mobile-app.onrender.com/api/auth/google/callback');
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${callbackUri}&response_type=token&scope=profile%20email&prompt=select_account`;
+    const {
+      GoogleSignin,
+      statusCodes,
+      isSuccessResponse,
+      isCancelledResponse,
+      isErrorWithCode,
+    } = pkg;
 
     try {
-      await Linking.openURL(authUrl);
-    } catch (e) {
-      setErr('Could not open browser for Google authentication.');
+      setBusy(true);
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+      // Ensure the device's account chooser always appears so user can pick any account
+      try {
+        await GoogleSignin.signOut();
+      } catch (_) {}
+
+      const response = await GoogleSignin.signIn();
+
+      if (isCancelledResponse(response)) {
+        return;
+      }
+
+      if (isSuccessResponse(response)) {
+        const { idToken, user } = response.data || {};
+        let accessToken = null;
+
+        if (!idToken) {
+          try {
+            const tokens = await GoogleSignin.getTokens();
+            accessToken = tokens?.accessToken || null;
+          } catch (_) {}
+        }
+
+        if (!idToken && !accessToken && !user?.email) {
+          setErr('Google did not return account details. Please try again.');
+          return;
+        }
+
+        await handleGoogleSuccess({
+          idToken,
+          accessToken,
+          user: user
+            ? {
+                email: user.email,
+                name: user.name || user.givenName || user.email?.split('@')[0],
+                picture: user.photo || null,
+                sub: user.id,
+              }
+            : undefined,
+        });
+      }
+    } catch (error) {
+      if (isErrorWithCode(error)) {
+        switch (error.code) {
+          case statusCodes.SIGN_IN_CANCELLED:
+            break;
+          case statusCodes.IN_PROGRESS:
+            setErr('Google sign-in is already in progress.');
+            break;
+          case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
+            setErr('Google Play Services is not available or needs an update on this phone.');
+            break;
+          default:
+            setErr(
+              error.message?.includes('DEVELOPER_ERROR') || String(error.code) === '10'
+                ? 'Google Android Client ID (SHA-1) not configured in Google Cloud Console (Code 10).'
+                : `Google sign-in error (${error.code}): ${error.message}`
+            );
+        }
+      } else {
+        setErr(error?.message || 'Could not complete Google sign-in.');
+      }
     } finally {
       setBusy(false);
     }
@@ -352,7 +416,7 @@ export default function AuthScreen() {
             <View style={s.badgeRow}>
               <View style={[s.securityDot, { backgroundColor: c.accent }]} />
               <Text style={[s.securityText, { color: c.text3 }]}>
-                Opens Google's official account selector on your phone
+                1-Tap Native Sign-in · Uses your phone's Google accounts
               </Text>
             </View>
 
