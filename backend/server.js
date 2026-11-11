@@ -8,6 +8,7 @@ const compression= require('compression');
 const rateLimit  = require('express-rate-limit');
 const connectDB  = require('./config/db');
 const { authRouter, groupRouter, expenseRouter } = require('./routes/index');
+const publicPages = require('./routes/publicPages');
 
 const app = express();
 const http       = require('http');
@@ -67,6 +68,7 @@ const startApp = async () => {
   app.use('/api/auth/forgot-password', otpLimiter);
 
   // ── Routes ─────────────────────────────────────────────
+  app.use('/',                     publicPages);
   app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
   app.use('/api/auth',             authRouter);
   app.use('/api/groups',           groupRouter);
